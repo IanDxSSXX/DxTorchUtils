@@ -25,11 +25,12 @@ class ValidateVessel:
         self.dataloader = dataloader
         self.metrics = [accuracy_score]
         self.metric_names = ["accuracy"]
-        self.logger = Logger("logger/{}-{}".format(model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+        self.logger = None
         self.is_tensorboard = False
 
     def validate(self):
         state_logger("Model and Dataset Loaded, Start to Validate!")
+        self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
         if self.is_gpu:
             self.model.cuda()

@@ -31,7 +31,6 @@ class TrainVessel:
            :return:
         """
 
-        self.logger = Logger("logger/{}-{}".format(model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
         self.model = model
         self.is_gpu = False
         self.is_multi_gpu = False
@@ -41,6 +40,7 @@ class TrainVessel:
         self.eval_num = eval_num
         self.eval_metric_func = accuracy_score
         self.eval_metric_name = "accuracy"
+        self.logger = None
 
         self.model_save_path = None
         self.time_start = None
@@ -59,6 +59,8 @@ class TrainVessel:
 
     def train(self):
         state_logger("Model and Dataset Loaded, Start to Train!")
+        if self.logger is None:
+            self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
         self.time_start = time.time()
 
@@ -185,3 +187,13 @@ class TrainVessel:
     def multi_gpu(self, device_ids):
         self.is_multi_gpu = True
         self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
+
+    def tensorboard_log_model(self):
+        if self.logger is None:
+            self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+
+        input_data, _ = next(iter(self.dataloader))
+        if self.is_gpu:
+            input_data = input_data.cuda()
+        self.logger.add_graph(self.model, input_data)
+        self.logger.close()
