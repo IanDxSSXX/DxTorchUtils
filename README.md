@@ -1,6 +1,6 @@
 # Usage
 
-`pip3 install dx-torchutils`
+`pip3 install dxtorchutils==0.0.4`
 
 1. train
 
