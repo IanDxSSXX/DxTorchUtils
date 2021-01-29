@@ -4,7 +4,7 @@ from torch.nn import *
 
 
 class LeNet5(Module):
-    def __init__(self, num_classes=10):
+    def __init__(self):
         super(LeNet5, self).__init__()
         self.conv0 = _Conv(1, 6)
         self.conv1 = _Conv(6, 16)
@@ -12,7 +12,7 @@ class LeNet5(Module):
         self.pool0 = AvgPool2d(2)
         self.pool1 = AvgPool2d(2)
         self.fc = _FC(120, 84)
-        self.out = Linear(84, num_classes)
+        self.out = Linear(84, 10)
 
     def forward(self, x):
         # (n, 1, 32, 32)
@@ -31,7 +31,7 @@ class LeNet5(Module):
         x = self.fc(x)
         # (n, 84)
         output = self.out(x)
-        # (n, num_classes)
+        # (n, 10)
 
         return output
 

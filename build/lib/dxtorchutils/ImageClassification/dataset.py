@@ -11,38 +11,32 @@ from ..utils.utils import state_logger
 class Dataset(data.Dataset):
     def __init__(
             self,
-            dataset_dir_path: str,
-            dataset_type: str,
-            raw_path: str,
-            label_path: str,
+            raw_dir_path: str,
+            label_dir_path: str,
             raw_name_format: str,
             label_name_format: str,
             raw_func: function = None,
             stop_at: int = None,
     ):
         """
-        数据集的初始化方法，数据集的格式必须为，例：训练集，含xx表示随便
-        原图：xxxx/dataset/training/xx raw xx/xx image xx.xxx
-        标签：xxxx/dataset/training/xx label xx/xx image xx.xxx
-        :param dataset_dir_path: dataset的文件夹路径
-        :param dataset_type: 数据集的类型，training/testing/validation
-        :param raw_path: 原图的文件夹名
-        :param label_path: 标签的文件夹名
+        :param raw_dir_path: 原图的文件夹名
+        :param label_dir_path: 标签的文件夹名
         :param raw_name_format: 原图的文件命名格式，
         :param label_name_format: 标签的文件命名格式，{}中间包裹的是图片id，如：图片名字：raw_1001.png, raw_1002.png，则该处为 raw_{}.png
         :param raw_func: 所需对原图改动的函数，输入cv2读入的原图，返回同样cv2可读的格式
         :param stop_at: 只读前stop_at张图，多用于测试，默认不管
         """
         super(Dataset, self).__init__()
-        assert dataset_type == "training" or "validation" or "testing", "Wrong dataset type!"
 
-        if dataset_dir_path.endswith("/"):
-            dataset_path = dataset_dir_path + dataset_type
+        if not raw_dir_path.endswith("/"):
+            self.raw_dir_path = raw_dir_path + "/"
         else:
-            dataset_path = dataset_dir_path + "/" + dataset_type
+            self.raw_dir_path = raw_dir_path
 
-        self.raw_dataset_path = dataset_path + "/" + raw_path + "/"
-        self.label_dataset_path = dataset_path + "/" + label_path + "/"
+        if not label_dir_path.endswith("/"):
+            self.label_dir_path = label_dir_path + "/"
+        else:
+            self.label_dir_path = label_dir_path
 
         self.raw_suffix = raw_name_format.split(".")[-1]
         self.raw_head = raw_name_format.split("{")[0]
@@ -55,8 +49,8 @@ class Dataset(data.Dataset):
         self.raw_suffix = "." + self.raw_suffix
         self.label_suffix = "." + self.label_suffix
 
-        raw_names = os.listdir(self.raw_dataset_path)
-        label_names = os.listdir(self.label_dataset_path)
+        raw_names = os.listdir(self.raw_dir_path)
+        label_names = os.listdir(self.label_dir_path)
         self.image_id = []
 
         stop = 0
@@ -98,8 +92,8 @@ class Dataset(data.Dataset):
         return data, target
 
     def get_data_target(self, image_id, data=None, target=None):
-        raw_path = self.raw_dataset_path + self.raw_head + image_id + self.raw_tail + self.raw_suffix
-        label_path = self.label_dataset_path + self.label_head + image_id + self.label_tail + self.label_suffix
+        raw_path = self.raw_dir_path + self.raw_head + image_id + self.raw_tail + self.raw_suffix
+        label_path = self.label_dir_path + self.label_head + image_id + self.label_tail + self.label_suffix
 
         raw_image = cv2.imread(raw_path)
         with open(label_path, "r") as f:

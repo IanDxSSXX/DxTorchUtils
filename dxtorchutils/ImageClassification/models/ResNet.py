@@ -6,7 +6,7 @@ import torch.nn.functional as torch
 
 
 class ResNet18(Module):
-    def __init__(self, num_classes=21):
+    def __init__(self):
         super(ResNet18, self).__init__()
         self.conv0 = Conv2d(3, 64, 7, 2, 4)
         self.conv1 = _building_block_layer(2, 2, 2, 2)
@@ -14,10 +14,8 @@ class ResNet18(Module):
         self.pool0 = MaxPool2d(3, 2)
         self.pool1 = AvgPool2d(2)
 
-        self.fc = Linear(4608, 1000)
+        self.out = Linear(4608, 1000)
 
-        self.num_classes = num_classes
-        self.out = Linear(1000, num_classes)
 
     def forward(self, input):
         # (n, 3, 244, 244)
@@ -28,34 +26,30 @@ class ResNet18(Module):
         # (n, 64, 56, 56)
         x = self.conv1(x)
 
-        # (n, 512, 7, 7) / (n, 2048, 7, 7)
+        # (n, 512, 7, 7)
         x = self.pool1(x)
 
-        # (n, 512, 3, 3) / (n, 512, 3, 3)
+        # (n, 512, 3, 3)
         x = x.view(x.shape[0], -1)
 
-        # (n, 4608) / (n, 18432)
-        x = self.fc(x)
+        # (n, 4608)
+        output = self.out(x)
 
         # (n, 1000)
-        output = self.out(x)
-        # (n, num_classes)
 
         return output
 
 
 class ResNet34(Module):
-    def __init__(self, num_classes=21):
+    def __init__(self):
         super(ResNet34, self).__init__()
         self.conv0 = Conv2d(3, 64, 7, 2, 4)
         self.conv1 = _building_block_layer(3, 4, 6, 3)
         self.pool0 = MaxPool2d(3, 2)
         self.pool1 = AvgPool2d(2)
 
-        self.fc = Linear(4608, 1000)
+        self.out = Linear(4608, 1000)
 
-        self.num_classes = num_classes
-        self.out = Linear(1000, num_classes)
 
     def forward(self, input):
         # (n, 3, 244, 244)
@@ -66,24 +60,22 @@ class ResNet34(Module):
         # (n, 64, 56, 56)
         x = self.conv1(x)
 
-        # (n, 512, 7, 7) / (n, 2048, 7, 7)
+        # (n, 512, 7, 7)
         x = self.pool1(x)
 
-        # (n, 512, 3, 3) / (n, 512, 3, 3)
+        # (n, 512, 3, 3)
         x = x.view(x.shape[0], -1)
 
-        # (n, 4608) / (n, 18432)
-        x = self.fc(x)
+        # (n, 4608)
+        output = self.out(x)
 
         # (n, 1000)
-        output = self.out(x)
-        # (n, num_classes)
 
         return output
 
 
 class ResNet50(Module):
-    def __init__(self, num_classes=21):
+    def __init__(self):
         super(ResNet50, self).__init__()
         self.conv0 = Conv2d(3, 64, 7, 2, 4)
         self.conv1 = _bottle_neck_layer(3, 4, 6, 3)
@@ -92,7 +84,6 @@ class ResNet50(Module):
         self.pool1 = AvgPool2d(2)
 
         self.out = Linear(18432, 1000)
-        self.out = Linear(1000, num_classes)
 
     def forward(self, input):
         # (n, 3, 244, 244)
@@ -103,24 +94,22 @@ class ResNet50(Module):
         # (n, 64, 56, 56)
         x = self.conv1(x)
 
-        # (n, 512, 7, 7) / (n, 2048, 7, 7)
+        # (n, 2048, 7, 7)
         x = self.pool1(x)
 
-        # (n, 512, 3, 3) / (n, 512, 3, 3)
+        # (n, 2048, 3, 3)
         x = x.view(x.shape[0], -1)
 
-        # (n, 4608) / (n, 18432)
-        x = self.fc(x)
+        # (n, 18432)
+        output = self.out(x)
 
         # (n, 1000)
-        output = self.out(x)
-        # (n, num_classes)
 
         return output
 
 
 class ResNet101(Module):
-    def __init__(self, num_classes=21):
+    def __init__(self):
         super(ResNet101, self).__init__()
         self.conv0 = Conv2d(3, 64, 7, 2, 4)
         self.conv1 = _bottle_neck_layer(3, 4, 23, 3)
@@ -128,8 +117,7 @@ class ResNet101(Module):
         self.pool0 = MaxPool2d(3, 2)
         self.pool1 = AvgPool2d(2)
 
-        self.fc = Linear(18432, 1000)
-        self.out = Linear(1000, num_classes)
+        self.out = Linear(18432, 1000)
 
     def forward(self, input):
         # (n, 3, 244, 244)
@@ -140,24 +128,22 @@ class ResNet101(Module):
         # (n, 64, 56, 56)
         x = self.conv1(x)
 
-        # (n, 512, 7, 7) / (n, 2048, 7, 7)
+        # (n, 2048, 7, 7)
         x = self.pool1(x)
 
-        # (n, 512, 3, 3) / (n, 512, 3, 3)
+        # (n, 2048, 3, 3)
         x = x.view(x.shape[0], -1)
 
-        # (n, 4608) / (n, 18432)
-        x = self.fc(x)
+        # (n, 18432)
+        output = self.out(x)
 
         # (n, 1000)
-        output = self.out(x)
-        # (n, num_classes)
 
         return output
 
 
 class ResNet152(Module):
-    def __init__(self, num_classes=21):
+    def __init__(self):
         super(ResNet152, self).__init__()
         self.conv0 = Conv2d(3, 64, 7, 2, 4)
         self.conv1 = _bottle_neck_layer(3, 8, 36, 3)
@@ -165,10 +151,7 @@ class ResNet152(Module):
         self.pool0 = MaxPool2d(3, 2)
         self.pool1 = AvgPool2d(2)
 
-        self.fc = Linear(18432, 1000)
-
-        self.num_classes = num_classes
-        self.out = Linear(1000, num_classes)
+        self.out = Linear(18432, 1000)
 
     def forward(self, input):
         # (n, 3, 244, 244)
@@ -179,20 +162,19 @@ class ResNet152(Module):
         # (n, 64, 56, 56)
         x = self.conv1(x)
 
-        # (n, 512, 7, 7) / (n, 2048, 7, 7)
+        # (n, 2048, 7, 7)
         x = self.pool1(x)
 
-        # (n, 512, 3, 3) / (n, 512, 3, 3)
+        # (n, 2048, 3, 3)
         x = x.view(x.shape[0], -1)
 
-        # (n, 4608) / (n, 18432)
-        x = self.fc(x)
+        # (n, 18432)
+        output = self.out(x)
 
         # (n, 1000)
-        x = self.out(x)
-        # (n, num_classes)
 
-        return x
+        return output
+
 
 def _building_block_layer(num1, num2, num3, num4):
     return Sequential(

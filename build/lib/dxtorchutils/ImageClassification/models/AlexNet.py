@@ -5,7 +5,7 @@ from torch.nn import *
 
 
 class AlexNet(Module):
-    def __init__(self, num_classes=1000):
+    def __init__(self):
         super(AlexNet, self).__init__()
         self.conv0 = _Conv(3, 96, 11, 4, 2, True)
         self.conv1 = _Conv(96, 256, 5, 1, 2, True)
@@ -18,9 +18,8 @@ class AlexNet(Module):
 
         self.fc0 = _FC(9216, 4096)
         self.fc1 = _FC(4096, 4096)
-        self.fc2 = Linear(4096, 1000)
+        self.out = Linear(4096, 1000)
 
-        self.out = Linear(1000, num_classes)
 
 
     def forward(self, x):
@@ -47,10 +46,8 @@ class AlexNet(Module):
         # (n, 4096)
         x = self.fc1(x)
         # (n, 4096)
-        x = self.fc2(x)
-        # (n, 1000)
         output = self.out(x)
-        # (n, num_classes)
+        # (n, 1000)
 
         return output
 

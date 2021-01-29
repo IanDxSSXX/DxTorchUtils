@@ -70,10 +70,9 @@ class DeeplabV3(Module):
             self.conv3 = Conv2d(256, num_classes, 1)
 
 
-    def forward(self, x):
-        h, w = x.shape[-2:]
-        x = self.conv0(x)
-        x = F.relu(x, True)
+    def forward(self, input):
+        x = self.conv0(input)
+        x = torch.relu(x)
         x = self.pool0(x)
         x = self.conv1(x)
         x = self.pool1(x)
@@ -88,13 +87,14 @@ class DeeplabV3(Module):
 
         x = torch.cat((x0, x1, x2, x3, x4), 1)
         x = self.conv2(x)
-        x = F.relu(x, True)
+        x = torch.relu(x)
         x = self.conv3(x)
-        x = F.relu(x, True)
+        x = torch.relu(x)
 
-        x = F.interpolate(x, (h, w), None, "bilinear", True)
+        h, w = input.shape[-2:]
+        output = F.interpolate(x, (h, w), None, "bilinear", True)
 
-        return x
+        return output
 
 
 def _building_block_layer(num1, num2, num3, num4):
@@ -172,25 +172,26 @@ class _BuildingBlock(Module):
         super(_BuildingBlock, self).__init__()
         self.conv0 = Conv2d(in_channel, out_channel, 3, stride, 1)
         self.conv1 = Conv2d(out_channel, out_channel, 3, 1, 1)
-        self.bn = BatchNorm2d(out_channel)
+        self.bn0 = BatchNorm2d(out_channel)
+        self.bn1 = BatchNorm2d(out_channel)
 
         # 相加时第一次通道数不同，需要增加通道
         self.conv_extend = Conv2d(in_channel, out_channel, 1, stride)
         self.first_in = first_in
 
-    def forward(self, x):
-        out = self.conv0(x)
-        out = self.bn(out)
-        out = F.relu(out, True)
-        out = self.conv1(out)
-        out = self.bn(out)
+    def forward(self, input):
+        x = self.conv0(input)
+        x = self.bn0(x)
+        x = torch.relu(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
 
         if self.first_in:
-            x = self.conv_extend(x)
+            input = self.conv_extend(input)
 
-        out = F.relu(x + out, True)
+        output = torch.relu(x + input)
 
-        return out
+        return output
 
 
 class _BuildingBlockAtrous(Module):
@@ -198,25 +199,26 @@ class _BuildingBlockAtrous(Module):
         super(_BuildingBlockAtrous, self).__init__()
         self.conv0 = Conv2d(in_channel, out_channel, 3, 1, dilation, dilation)
         self.conv1 = Conv2d(out_channel, out_channel, 3, 1, dilation, dilation)
-        self.bn = BatchNorm2d(out_channel)
+        self.bn0 = BatchNorm2d(out_channel)
+        self.bn1 = BatchNorm2d(out_channel)
 
         # 相加时第一次通道数不同，需要增加通道
         self.conv_extend = Conv2d(in_channel, out_channel, 1, 1)
         self.first_in = first_in
 
-    def forward(self, x):
-        out = self.conv0(x)
-        out = self.bn(out)
-        out = F.relu(out, True)
-        out = self.conv1(out)
-        out = self.bn(out)
+    def forward(self, input):
+        x = self.conv0(input)
+        x = self.bn0(x)
+        x = torch.relu(x)
+        x = self.conv1(x)
+        x = self.bn1(x)
 
         if self.first_in:
-            x = self.conv_extend(x)
+            input = self.conv_extend(input)
 
-        out = F.relu(x + out, True)
+        output = torch.relu(x + input)
 
-        return out
+        return output
 
 
 class _BottleNeck(Module):
@@ -235,22 +237,22 @@ class _BottleNeck(Module):
         self.conv_extend = Conv2d(in_channel, out_channel, 1, stride)
         self.first_in = first_in
 
-    def forward(self, x):
-        x0 = self.conv0(x)
-        x0 = self.bn0(x0)
-        x0 = F.relu(x0, True)
-        x0 = self.conv1(x0)
-        x0 = self.bn0(x0)
-        x0 = F.relu(x0, True)
-        x0 = self.conv2(x0)
-        x0 = self.bn1(x0)
+    def forward(self, input):
+        x = self.conv0(input)
+        x = self.bn0(x)
+        x = torch.relu(x)
+        x = self.conv1(x)
+        x = self.bn0(x)
+        x = torch.relu(x)
+        x = self.conv2(x)
+        x = self.bn1(x)
 
         if self.first_in:
-            x = self.conv_extend(x)
+            input = self.conv_extend(input)
 
-        x0 = F.relu(x + x0, True)
+        output = torch.relu(x + input)
 
-        return x0
+        return output
 
 
 class _BottleNeckAtrous(Module):
@@ -269,22 +271,22 @@ class _BottleNeckAtrous(Module):
         self.conv_extend = Conv2d(in_channel, out_channel, 1, 1)
         self.first_in = first_in
 
-    def forward(self, x):
-        x0 = self.conv0(x)
-        x0 = self.bn0(x0)
-        x0 = F.relu(x0, True)
-        x0 = self.conv1(x0)
-        x0 = self.bn0(x0)
-        x0 = F.relu(x0, True)
-        x0 = self.conv2(x0)
-        x0 = self.bn1(x0)
+    def forward(self, input):
+        x = self.conv0(input)
+        x = self.bn0(x)
+        x = torch.relu(x)
+        x = self.conv1(x)
+        x = self.bn0(x)
+        x = torch.relu(x)
+        x = self.conv2(x)
+        x = self.bn1(x)
 
         if self.first_in:
-            x = self.conv_extend(x)
+            input = self.conv_extend(input)
 
-        x0 = F.relu(x + x0, True)
+        output = torch.relu(x + input)
 
-        return x0
+        return output
 
 
 class _ASPP(Module):
@@ -298,9 +300,9 @@ class _ASPP(Module):
             kernel_size = 3
         self.conv = Conv2d(in_channel, out_channel, kernel_size, 1, padding, dilation)
 
-    def forward(self, x):
-        x = self.conv(x)
-        x = F.relu(x, True)
+    def forward(self, input):
+        x = self.conv(input)
+        output = torch.relu(x)
 
-        return x
+        return output
 

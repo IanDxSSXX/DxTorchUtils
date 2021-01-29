@@ -5,8 +5,8 @@ import function
 from sklearn.metrics import accuracy_score
 from torch.utils.data import DataLoader
 import numpy as np
-from ..utils.info_logger import Logger
-from ..utils.utils import state_logger
+from dxtorchutils.utils.info_logger import Logger
+from dxtorchutils.utils.utils import state_logger
 import torch
 
 
@@ -16,7 +16,7 @@ class ValidateVessel:
         dataloader: DataLoader,
         model: torch.nn.Module,
         model_paras_path: str = None,
-        color_map = None
+        color_map=None
     ):
         self.model = model
         if model_paras_path is not None:
@@ -29,13 +29,13 @@ class ValidateVessel:
         self.logger = None
         self.is_tensorboard = False
         if color_map is None:
-            self.color_map = dataloader.dataset.colormap
+            self.color_map = dataloader.dataset.color_map
         else:
             self.color_map = color_map
 
     def validate(self):
         state_logger("Model and Dataset Loaded, Start to Validate!")
-        self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+        self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__.lower(), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
         if self.is_gpu:
             self.model.cuda()
@@ -58,15 +58,15 @@ class ValidateVessel:
                     targets = targets.type(torch.LongTensor)
 
                     if self.is_gpu:
-                        pred = prediction.cpu().data.numpy()
+                        pred = np.squeeze(prediction.cpu().data.numpy())
                         label = targets.cpu().data.numpy()
                         raw = data.cpu().data.numpy()
                     else:
-                        pred = prediction.data.numpy()
+                        pred = np.squeeze(prediction.data.numpy())
                         label = targets.data.numpy()
                         raw = data.data.numpy()
 
-                    img_pred = (np.zeros((pred.shape[1], pred.shape[2], 3))).astype(np.uint8)
+                    img_pred = (np.zeros((pred.shape[0], pred.shape[1], 3))).astype(np.uint8)
                     img_label = (np.zeros((label.shape[0], label.shape[1], 3))).astype(np.uint8)
                     img_raw = (np.reshape(raw, raw.shape[1:]).transpose(1, 2, 0) * 255).astype(np.uint8)
 
@@ -85,9 +85,9 @@ class ValidateVessel:
                             img_label[i][j] = color
 
                     lw_rate = raw.shape[-1] / raw.shape[-2]
-                    img_pred = cv2.resize(img_pred, (100, lw_rate * 100))
-                    img_label = cv2.resize(img_label, (100, lw_rate * 100))
-                    img_raw = cv2.resize(img_raw, (100, lw_rate * 100))
+                    img_pred = cv2.resize(img_pred, (100, int(lw_rate * 100)))
+                    img_label = cv2.resize(img_label, (100, int(lw_rate * 100)))
+                    img_raw = cv2.resize(img_raw, (100, int(lw_rate * 100)))
 
                     if len(img_raw.shape) == 2:
                         img_raw = np.reshape(img_raw, (img_raw.shape[0], img_raw.shape[1], 1))

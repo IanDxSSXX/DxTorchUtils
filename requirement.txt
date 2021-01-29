@@ -1,0 +1,5 @@
+torch>=1.7.0
+tensorboard>=2.4.0
+function==1.2.0
+numpy>=1.19.4
+scikit-learn>=0.23.2

@@ -24,6 +24,7 @@ dxtorchutils/SemanticSegmentation/models/UNet.py
 dxtorchutils/SemanticSegmentation/models/__init__.py
 dxtorchutils/utils/__init__.py
 dxtorchutils/utils/info_logger.py
+dxtorchutils/utils/metrics.py
 dxtorchutils/utils/optimizers.py
 dxtorchutils/utils/train.py
 dxtorchutils/utils/utils.py

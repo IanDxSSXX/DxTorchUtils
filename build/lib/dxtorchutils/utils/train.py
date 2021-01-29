@@ -47,6 +47,7 @@ class TrainVessel:
         self.iteration = None
         self.loss_all = None
         self.eval_res_all = None
+        self.log_every_epoch = 1
 
         if model_paras_path is not None:
             self.model.load_state_dict(torch.load(model_paras_path))
@@ -59,8 +60,8 @@ class TrainVessel:
 
     def train(self):
         state_logger("Model and Dataset Loaded, Start to Train!")
-        if self.logger is None:
-            self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+        if self.logger is None and self.is_tensorboard is True:
+            self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__.lower(), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
         self.time_start = time.time()
 
@@ -70,30 +71,29 @@ class TrainVessel:
         self.model.train()
 
         self.iteration = 0
-        every_epoch = self.dataloader.__len__() % 1000 if self.dataloader.__len__() % 1000 < 10 else 9
-        every_epoch = 10 - every_epoch
 
         for epoch in range(self.epochs):
             for data, targets in self.dataloader:
                 self.train_mini_batch(data, targets)
 
-            if (epoch + 1) % every_epoch == 0 or epoch == 0:
+            if (epoch + 1) % self.log_every_epoch == 0 or epoch == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    rand = random.randint(0, len(self.dataloader.dataset) - self.eval_num - 1)
-                    eval_data, eval_targets = self.dataloader.dataset.__getitem__(slice(rand, rand + self.eval_num))
-
-                    if self.is_gpu:
-                        eval_data = eval_data.cuda()
-                        eval_targets = eval_targets.cuda()
-
                     self.loss_all = []
                     self.eval_res_all = []
-                    for data, targets in zip(eval_data, eval_targets):
-                        data = torch.unsqueeze(data, 0)
-                        targets = torch.unsqueeze(targets, 0)
 
-                        self.eval_through_training(data, targets)
+                    rand = random.randint(0, len(self.dataloader.dataset) - self.eval_num - 1)
+                    for index in range(rand, rand + self.eval_num):
+                        data, target = self.dataloader.dataset.__getitem__(index)
+
+                        if self.is_gpu:
+                            data = data.cuda()
+                            target = target.cuda()
+
+                        data = torch.unsqueeze(data, 0)
+                        target = torch.unsqueeze(target, 0)
+
+                        self.eval_through_training(data, target)
 
                     eval_res = np.mean(np.array(self.eval_res_all))
                     loss = np.mean(np.array(self.loss_all))
@@ -109,6 +109,11 @@ class TrainVessel:
                             torch.save(self.model.modules.state_dict(), self.model_save_path)
                         else:
                             torch.save(self.model.state_dict(), self.model_save_path)
+                    else:
+                        if self.is_multi_gpu:
+                            torch.save(self.model.modules.state_dict(), self.__class__.__name__.lower() + ".pth")
+                        else:
+                            torch.save(self.model.state_dict(), self.__class__.__name__.lower() + ".pth")
 
                 self.model.train()
 
@@ -131,7 +136,12 @@ class TrainVessel:
             targets = targets.cuda()
 
         output = self.model(data)
-        loss = self.criteria(output, targets)
+        if isinstance(output, tuple):
+            loss = self.criteria(output[0], targets)
+            for i in range(1, len(output)):
+                loss += 0.3 * self.criteria(output[i], targets)
+        else:
+            loss = self.criteria(output, targets)
         loss.backward()
 
         self.opt.step()
@@ -188,12 +198,18 @@ class TrainVessel:
         self.is_multi_gpu = True
         self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
 
+
     def tensorboard_log_model(self):
         if self.logger is None:
             self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
+        if self.is_gpu:
+            self.model = self.model.cuda()
+
         input_data, _ = next(iter(self.dataloader))
+
         if self.is_gpu:
             input_data = input_data.cuda()
+
         self.logger.add_graph(self.model, input_data)
         self.logger.close()

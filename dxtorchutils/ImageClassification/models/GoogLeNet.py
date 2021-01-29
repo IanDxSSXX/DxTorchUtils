@@ -34,8 +34,7 @@ class GoogLeNet(Module):
         self.inception3b = _Inception(832, 192, 48, 384, 384, 128, 128)
         self.aux1 = _InceptionAux(512)
         self.aux2 = _InceptionAux(528)
-        self.fc = Linear(1024, 1000)
-        self.out = Linear(1000, num_classes)
+        self.out = Linear(1024, 1000)
 
     def forward(self, input):
         # (n, 3, 224, 224)
@@ -76,13 +75,10 @@ class GoogLeNet(Module):
         # (n, 1024, 1, 1)
         x = x.view(x.shape[0], -1)
         # (n, 1024)
-        x = self.fc(x)
+        output = self.out(x)
         # (n, 1000)
         if self.training:
-            x = x + 0.3 * aux1 + 0.3 * aux2
-
-        output = self.out(x)
-        # (n, num_classes)
+            return output, aux1, aux2
 
         return output
 

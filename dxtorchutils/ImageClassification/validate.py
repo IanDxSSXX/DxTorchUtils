@@ -30,7 +30,7 @@ class ValidateVessel:
 
     def validate(self):
         state_logger("Model and Dataset Loaded, Start to Validate!")
-        self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+        self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__.lower(), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
         if self.is_gpu:
             self.model.cuda()

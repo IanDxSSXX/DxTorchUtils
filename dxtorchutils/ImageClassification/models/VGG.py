@@ -6,18 +6,17 @@ import torch.nn.functional as torch
 
 
 class VGG11(Module):
-    def __init__(self, num_classes=10, bn=True):
+    def __init__(self, bn=True):
         super(VGG11, self).__init__()
         self.conv = _conv_layer(1, 1, 2, 2, 2, bn)
-        self.fc1 = Sequential(
+        self.fc = Sequential(
             OrderedDict([
                 ("fc1", _FC(25088, 4096)),
                 ("fc2", _FC(4096, 4096))
             ])
         )
-        self.fc2 = Linear(4096, 1000)
+        self.out = Linear(4096, 1000)
 
-        self.out = Linear(1000, num_classes)
 
     def forward(self, input):
         # (n, 3, 224, 224)
@@ -25,29 +24,26 @@ class VGG11(Module):
         # (n, 512, 7, 7)
         x = x.view(x.shape[0], -1)
         # (n, 25088)
-        x = self.fc1(x)
+        x = self.fc(x)
         # (n, 4096)
-        x = self.fc2(x)
-        # (n, 1000)
         output = self.out(x)
-        # (n, num_classes)
+        # (n, 1000)
 
         return output
 
 
 class VGG13(Module):
-    def __init__(self, num_classes=10, bn=True):
+    def __init__(self, bn=True):
         super(VGG13, self).__init__()
         self.conv = _conv_layer(2, 2, 2, 2, 2, bn)
-        self.fc1 = Sequential(
+        self.fc = Sequential(
             OrderedDict([
                 ("fc1", _FC(25088, 4096)),
                 ("fc2", _FC(4096, 4096))
             ])
         )
-        self.fc2 = Linear(4096, 1000)
+        self.out = Linear(4096, 1000)
 
-        self.out = Linear(1000, num_classes)
 
     def forward(self, input):
         # (n, 3, 224, 224)
@@ -55,29 +51,26 @@ class VGG13(Module):
         # (n, 512, 7, 7)
         x = x.view(x.shape[0], -1)
         # (n, 25088)
-        x = self.fc1(x)
+        x = self.fc(x)
         # (n, 4096)
-        x = self.fc2(x)
-        # (n, 1000)
         output = self.out(x)
-        # (n, num_classes)
+        # (n, 1000)
 
         return output
 
 
 class VGG16(Module):
-    def __init__(self, num_classes=10, bn=True):
+    def __init__(self, bn=True):
         super(VGG16, self).__init__()
         self.conv = _conv_layer(2, 2, 3, 3, 3, bn)
-        self.fc1 = Sequential(
+        self.fc = Sequential(
             OrderedDict([
                 ("fc1", _FC(25088, 4096)),
                 ("fc2", _FC(4096, 4096))
             ])
         )
-        self.fc2 = Linear(4096, 1000)
+        self.out = Linear(4096, 1000)
 
-        self.out = Linear(1000, num_classes)
 
     def forward(self, input):
         # (n, 3, 224, 224)
@@ -85,29 +78,26 @@ class VGG16(Module):
         # (n, 512, 7, 7)
         x = x.view(x.shape[0], -1)
         # (n, 25088)
-        x = self.fc1(x)
+        x = self.fc(x)
         # (n, 4096)
-        x = self.fc2(x)
-        # (n, 1000)
         output = self.out(x)
-        # (n, num_classes)
+        # (n, 1000)
 
         return output
 
 
 class VGG19(Module):
-    def __init__(self, num_classes=10, bn=True):
+    def __init__(self, bn=True):
         super(VGG19, self).__init__()
         self.conv = _conv_layer(2, 2, 4, 4, 4, bn)
-        self.fc1 = Sequential(
+        self.fc = Sequential(
             OrderedDict([
                 ("fc1", _FC(25088, 4096)),
                 ("fc2", _FC(4096, 4096))
             ])
         )
-        self.fc2 = Linear(4096, 1000)
+        self.out = Linear(4096, 1000)
 
-        self.out = Linear(1000, num_classes)
 
     def forward(self, input):
         # (n, 3, 224, 224)
@@ -115,12 +105,10 @@ class VGG19(Module):
         # (n, 512, 7, 7)
         x = x.view(x.shape[0], -1)
         # (n, 25088)
-        x = self.fc1(x)
+        x = self.fc(x)
         # (n, 4096)
-        x = self.fc2(x)
-        # (n, 1000)
         output = self.out(x)
-        # (n, num_classes)
+        # (n, 1000)
 
         return output
 
@@ -142,22 +130,23 @@ class _Conv(Module):
         super(_Conv, self).__init__()
         self.seq = Sequential()
         self.seq.add_module("conv0", Conv2d(in_channels, out_channels, 3, 1, 1))
+        self.bns = Sequential()
+        self.bns.add_module("bn0", BatchNorm2d(out_channels))
         for i in range(layer_num - 1):
             self.seq.add_module("conv{}".format(i + 1), Conv2d(out_channels, out_channels, 3, 1, 1))
+            self.bns.add_module("bn{}".format(i + 1), BatchNorm2d(out_channels))
 
         self.pool = MaxPool2d(2)
-        self.bn = BatchNorm2d(out_channels)
-
         self.is_bn = is_bn
 
     def forward(self, input):
         x = input
-        for layer_name in self.seq._modules:
-            x = self.seq._modules[layer_name](x)
+        for bn_name, conv_name in zip(self.bns._modules, self.seq._modules):
+            x = self.seq._modules[conv_name](x)
             if self.is_bn:
-                x = self.bn(x)
+                x = self.bns._modules[bn_name](x)
             x = torch.relu(x)
-            
+
         output = self.pool(x)
 
         return output
