@@ -1,9 +1,21 @@
-""" DeeplabV3 """
-from collections import OrderedDict
+"""
+DeeplabV3
+    Input: (3, 224, 224)
 
-import torch
-from torch.nn import *
+    Total params: 39,057,557
+    Trainable params: 39,057,557
+    Non-trainable params: 0
+
+    Input size (MB): 0.57
+    Forward/backward pass size (MB): 502.58
+    Params size (MB): 148.99
+    Estimated Total Size (MB): 652.15
+
+    MACs/FLOPs: 22,029,738,004
+"""
+
 import torch.nn.functional as F
+from dxtorchutils.utils.layers import *
 
 
 class DeeplabV3(Module):
@@ -28,10 +40,10 @@ class DeeplabV3(Module):
 
         self.num_classes = num_classes
         if resnet_based_type == (18 or 34):
-            self.aspp0 = _ASPP(512, 128, 1)
-            self.aspp1 = _ASPP(512, 128, 6)
-            self.aspp2 = _ASPP(512, 128, 12)
-            self.aspp3 = _ASPP(512, 128, 18)
+            self.aspp0 = _aspp(512, 128, 1)
+            self.aspp1 = _aspp(512, 128, 6)
+            self.aspp2 = _aspp(512, 128, 12)
+            self.aspp3 = _aspp(512, 128, 18)
 
             self.global_pool = Sequential(
                 OrderedDict([
@@ -49,10 +61,10 @@ class DeeplabV3(Module):
             self.conv3 = Conv2d(128, num_classes, 1)
 
         else:
-            self.aspp0 = _ASPP(2048, 256, 1)
-            self.aspp1 = _ASPP(2048, 256, 6)
-            self.aspp2 = _ASPP(2048, 256, 12)
-            self.aspp3 = _ASPP(2048, 256, 18)
+            self.aspp0 = _aspp(2048, 256, 1)
+            self.aspp1 = _aspp(2048, 256, 6)
+            self.aspp2 = _aspp(2048, 256, 12)
+            self.aspp3 = _aspp(2048, 256, 18)
 
             self.global_pool = Sequential(
                 OrderedDict([
@@ -261,25 +273,18 @@ class _BottleNeckAtrous(Module):
         # 所有中间层都是输出层通道数的 1/4
         mid_channel = out_channel // 4
 
-        self.conv0 = Conv2d(in_channel, mid_channel, 1, 1)
-        self.conv1 = Conv2d(mid_channel, mid_channel, 3, 1, dilation, dilation)
-        self.conv2 = Conv2d(mid_channel, out_channel, 1)
-        self.bn0 = BatchNorm2d(mid_channel)
-        self.bn1 = BatchNorm2d(out_channel)
-
+        self.conv0 = conv_relu_bn(in_channel, mid_channel, 1, 1)
+        self.conv1 = conv_relu_bn(mid_channel, mid_channel, 3, 1, dilation, dilation)
+        self.conv2 = conv_relu_bn(mid_channel, out_channel, 1)
+ 
         # 相加时第一次通道数不同，需要增加通道
         self.conv_extend = Conv2d(in_channel, out_channel, 1, 1)
         self.first_in = first_in
 
     def forward(self, input):
         x = self.conv0(input)
-        x = self.bn0(x)
-        x = torch.relu(x)
         x = self.conv1(x)
-        x = self.bn0(x)
-        x = torch.relu(x)
         x = self.conv2(x)
-        x = self.bn1(x)
 
         if self.first_in:
             input = self.conv_extend(input)
@@ -289,20 +294,25 @@ class _BottleNeckAtrous(Module):
         return output
 
 
-class _ASPP(Module):
-    def __init__(self, in_channel, out_channel, dilation):
-        super(_ASPP, self).__init__()
-        if dilation == 1:
-            padding = 0
-            kernel_size = 1
-        else:
-            padding = dilation
-            kernel_size = 3
-        self.conv = Conv2d(in_channel, out_channel, kernel_size, 1, padding, dilation)
+def _aspp(in_channel, out_channel, dilation):
+    if dilation == 1:
+        padding = 0
+        kernel_size = 1
+    else:
+        padding = dilation
+        kernel_size = 3
+    
+    return conv_relu(in_channel, out_channel, kernel_size, 1, padding, dilation)
 
-    def forward(self, input):
-        x = self.conv(input)
-        output = torch.relu(x)
 
-        return output
+if __name__ == '__main__':
+    # calculate parameters
+    from thop import profile
+    from torchsummary import summary
 
+    model = DeeplabV3()
+    input = torch.randn((1, 3, 224, 224))
+    macs, params = profile(model, inputs=(input, ))
+    summary(model, (3, 224, 224))
+
+    print("MACs: {}".format(macs))

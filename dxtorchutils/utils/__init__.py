@@ -1,4 +1,4 @@
-__all__ = ["train", "utils", "optimizers", "metrics"]
+__all__ = ["train", "utils", "optimizers", "metrics", "layers"]
 
 from .train import TrainVessel
 from .utils import *

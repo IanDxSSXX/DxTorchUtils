@@ -1,30 +1,41 @@
-""" AlexNet """
-from collections import OrderedDict
-import torch
-from torch.nn import *
+"""
+AlexNet
+    Input: (1, 3, 224, 224)
+    Total params: 62,378,344
+    Trainable params: 62,378,344
+    Non-trainable params: 0
+
+    Input size (MB): 0.57
+    Forward/backward pass size (MB): 14.69
+    Params size (MB): 237.95
+    Estimated Total Size (MB): 253.22
+
+    MACs/FLOPs: 1,135,906,176
+"""
+from dxtorchutils.utils.layers import *
 
 
 class AlexNet(Module):
     def __init__(self):
         super(AlexNet, self).__init__()
-        self.conv0 = _Conv(3, 96, 11, 4, 2, True)
-        self.conv1 = _Conv(96, 256, 5, 1, 2, True)
-        self.conv2 = _Conv(256, 384, 3, 1, 1)
-        self.conv3 = _Conv(384, 384, 3, 1, 1)
-        self.conv4 = _Conv(384, 256, 3, 1, 1)
+        self.conv0 = conv_tanh_lrn(3, 96, 11, 4, 2)
+        self.conv1 = conv_tanh_lrn(96, 256, 5, 1, 2)
+        self.conv2 = conv_tanh(256, 384, 3, 1, 1)
+        self.conv3 = conv_tanh(384, 384, 3, 1, 1)
+        self.conv4 = conv_tanh(384, 256, 3, 1, 1)
 
         self.pool0 = MaxPool2d(3, 2)
         self.pool1 = MaxPool2d(3, 2)
 
-        self.fc0 = _FC(9216, 4096)
-        self.fc1 = _FC(4096, 4096)
+        self.fc0 = fc_tanh_do(9216, 4096)
+        self.fc1 = fc_tanh_do(4096, 4096)
+
         self.out = Linear(4096, 1000)
 
 
-
-    def forward(self, x):
+    def forward(self, input):
         # (n, 3, 224, 224)
-        x = self.conv0(x)
+        x = self.conv0(input)
         # (n, 96, 55, 55)
         x = self.pool0(x)
         # (n, 96, 27, 27)
@@ -52,33 +63,14 @@ class AlexNet(Module):
         return output
 
 
-class _Conv(Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, is_lrn=False):
-        super(_Conv, self).__init__()
-        self.conv = Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-        self.lrn = LocalResponseNorm(5)
-        self.is_lrn = is_lrn
+if __name__ == '__main__':
+    # calculate parameters
+    from thop import profile
+    from torchsummary import summary
 
-    def forward(self, input):
-        x = self.conv(input)
-        x = torch.tanh(x)
-        if self.is_lrn:
-            output = self.lrn(x)
-        else:
-            output = x
+    model = AlexNet()
+    input = torch.randn((1, 3, 224, 224))
+    macs, params = profile(model, inputs=(input, ))
+    summary(model, (3, 224, 224))
 
-        return output
-
-
-class _FC(Module):
-    def __init__(self, in_features, out_features):
-        super(_FC, self).__init__()
-        self.fc = Linear(in_features, out_features)
-        self.lrn = LocalResponseNorm(5)
-
-    def forward(self, input):
-        x = self.fc(input)
-        x = torch.tanh(x)
-        output = torch.dropout(x, 0.5, self.training)
-
-        return output
+    print("MACs: {}".format(macs))

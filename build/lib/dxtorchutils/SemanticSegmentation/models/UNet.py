@@ -1,105 +1,110 @@
-""" UNet """
-""" 不检测边缘而得到同原来图一样大的图 """
-import torch
-from torch.nn import *
+"""
+UNet
+    Input: (3, 224, 224)
+
+    Total params: 28,956,546
+    Trainable params: 28,956,546
+    Non-trainable params: 0
+
+    Input size (MB): 0.57
+    Forward/backward pass size (MB): 987.66
+    Params size (MB): 110.46
+    Estimated Total Size (MB): 1098.69
+
+    MACs/FLOPs: 36,972,988,416
+"""
 import torch.nn.functional as F
+from dxtorchutils.utils.layers import *
 
 
 class UNet(Module):
-    def __init__(self, n_classed=2, in_features=1, edge_opt=False, is_bn=True):
+    def __init__(self, num_classes=2, in_features=3, edge_opt=False):
         super(UNet, self).__init__()
-        self.pool = MaxPool2d(2)
-        self.en_block1 = _ConvBlock(in_features, 64, edge_opt, is_bn)
-        self.en_block2 = _ConvBlock(64, 128, edge_opt, is_bn)
-        self.en_block3 = _ConvBlock(128, 256, edge_opt, is_bn)
-        self.en_block4 = _ConvBlock(256, 512, edge_opt, is_bn)
-        self.en_block5 = _ConvBlock(512, 1024, edge_opt, is_bn)
 
-        self.up_sample1 = _UpSampleBlock(1024, edge_opt, is_bn)
-        self.up_sample2 = _UpSampleBlock(512, edge_opt, is_bn)
-        self.up_sample3 = _UpSampleBlock(256, edge_opt, is_bn)
-        self.up_sample4 = _UpSampleBlock(128, edge_opt, is_bn)
+        self.en_block0 = _ConvBlock(in_features, 64, edge_opt)
+        self.en_block1 = _ConvBlock(64, 128, edge_opt)
+        self.en_block2 = _ConvBlock(128, 256, edge_opt)
+        self.en_block3 = _ConvBlock(256, 512, edge_opt)
+        self.en_block4 = _ConvBlock(512, 1024, edge_opt)
 
-        self.de_block1 = _ConvBlock(1024, 512, edge_opt, is_bn)
-        self.de_block2 = _ConvBlock(512, 256, edge_opt, is_bn)
-        self.de_block3 = _ConvBlock(256, 128, edge_opt, is_bn)
-        self.de_block4 = _ConvBlock(128, 64, edge_opt, is_bn)
+        self.pool0 = MaxPool2d(2)
+        self.pool1 = MaxPool2d(2)
+        self.pool2 = MaxPool2d(2)
+        self.pool3 = MaxPool2d(2)
 
-        self.final_layer = Conv2d(64, n_classed, 1)
 
-    def forward(self, x):
-        # x(1, 572, 572)
-        x0 = self.en_block1(x)
-        # x0(64, 568, 568)
-        x1 = self.pool(x0)
-        # x1(64, 284, 284)
-        x1 = self.en_block2(x1)
-        # x1(128, 280, 280)
-        x2 = self.pool(x1)
-        # x2(128, 140, 140)
-        x2 = self.en_block3(x2)
-        # x2(256, 136, 136)
-        x3 = self.pool(x2)
-        # x3(256, 68, 68)
-        x3 = self.en_block4(x3)
-        # x3(512, 64, 64)
-        x = self.pool(x3)
-        # x(512, 32, 32)
-        x = self.en_block5(x)
-        # x(1024, 28, 28)
-        x = self.up_sample1(x, x3)
-        # x(1024, 56, 56)
+        self.up_sample0 = _UpSampleBlock(1024, edge_opt)
+        self.up_sample1 = _UpSampleBlock(512, edge_opt)
+        self.up_sample2 = _UpSampleBlock(256, edge_opt)
+        self.up_sample3 = _UpSampleBlock(128, edge_opt)
+
+        self.de_block0 = _ConvBlock(1024, 512, edge_opt)
+        self.de_block1 = _ConvBlock(512, 256, edge_opt)
+        self.de_block2 = _ConvBlock(256, 128, edge_opt)
+        self.de_block3 = _ConvBlock(128, 64, edge_opt)
+
+        self.final_layer = Conv2d(64, num_classes, 1)
+
+    def forward(self, input):
+        x0 = self.en_block0(input)
+
+        x1 = self.pool0(x0)
+
+        x1 = self.en_block1(x1)
+
+        x2 = self.pool1(x1)
+
+        x2 = self.en_block2(x2)
+
+        x3 = self.pool2(x2)
+
+        x3 = self.en_block3(x3)
+
+        x = self.pool3(x3)
+
+        x = self.en_block4(x)
+
+        x = self.up_sample0(x, x3)
+
+        x = self.de_block0(x)
+
+        x = self.up_sample1(x, x2)
+
         x = self.de_block1(x)
-        # x(512, 52, 52)
-        x = self.up_sample2(x, x2)
-        # x(512, 104, 104)
-        x = self.de_block2(x)
-        # x(256, 100, 100)
-        x = self.up_sample3(x, x1)
-        # x(256, 200, 200)
-        x = self.de_block3(x)
-        # x(128, 196, 196)
-        x = self.up_sample4(x, x0)
-        # x(128, 392, 392)
-        x = self.de_block4(x)
-        # x(64, 388, 388)
-        x = self.final_layer(x)
-        # x(2, 388, 388)
 
-        return x
+        x = self.up_sample2(x, x1)
+
+        x = self.de_block2(x)
+
+        x = self.up_sample3(x, x0)
+
+        x = self.de_block3(x)
+
+        output = self.final_layer(x)
+
+        return output
 
 
 class _ConvBlock(Module):
-    def __init__(self, in_channels, out_channels, edge_opt, is_bn=True):
+    def __init__(self, in_channels, out_channels, edge_opt):
         super(_ConvBlock, self).__init__()
         padding = 0 if edge_opt else 1
-        self.conv1 = Conv2d(in_channels, out_channels, 3, 1, padding)
-        self.conv2 = Conv2d(out_channels, out_channels, 3, 1, padding)
-        self.bn1 = BatchNorm2d(out_channels)
-        self.bn2 = BatchNorm2d(out_channels)
+        self.conv1 = conv_relu_bn(in_channels, out_channels, 3, 1, padding)
+        self.conv2 = conv_relu_bn(out_channels, out_channels, 3, 1, padding)
 
-        self.is_bn = is_bn
 
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x, True)
-        if self.is_bn:
-            x = self.bn1(x)
-        x = self.conv2(x)
-        x = F.relu(x, True)
-        if self.is_bn:
-            x = self.bn2(x)
+    def forward(self, input):
+        x = self.conv1(input)
+        output = self.conv2(x)
 
-        return x
+        return output
 
 
 class _UpSampleBlock(Module):
-    def __init__(self, in_channels, edge_opt, is_bn=True):
+    def __init__(self, in_channels, edge_opt):
         super(_UpSampleBlock, self).__init__()
         self.up_sample = Upsample(None, 2)
-        self.conv = Conv2d(in_channels, in_channels // 2, 1)
-        self.bn = BatchNorm2d(in_channels // 2,)
-        self.is_bn = is_bn
+        self.conv = conv_relu_bn(in_channels, in_channels // 2, 1)
 
         self.edge_opt = edge_opt
 
@@ -111,9 +116,6 @@ class _UpSampleBlock(Module):
 
         x_de = self.up_sample(x_de)
         x_de = self.conv(x_de)
-        x_de = F.relu(x_de, True)
-        if self.is_bn:
-            x_de = self.bn(x_de)
 
         x_de = F.interpolate(x_de, (h, w), None, "bilinear", True)
 
@@ -122,6 +124,19 @@ class _UpSampleBlock(Module):
             x_en = x_en[:, :, 2: h_edge + 2, 2: w_edge + 2]
             x_de = x_de[:, :, 2: h_edge + 2, 2: w_edge + 2]
 
-        x = torch.cat((x_en, x_de), 1)
+        output = torch.cat((x_en, x_de), 1)
 
-        return x
+        return output
+
+
+if __name__ == '__main__':
+    # calculate parameters
+    from thop import profile
+    from torchsummary import summary
+
+    model = UNet()
+    input = torch.randn((1, 3, 224, 224))
+    macs, params = profile(model, inputs=(input, ))
+    summary(model, (3, 224, 224))
+
+    print("MACs: {}".format(macs))

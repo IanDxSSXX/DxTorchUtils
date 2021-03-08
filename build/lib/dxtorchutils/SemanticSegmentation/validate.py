@@ -1,13 +1,13 @@
 import time
-
 import cv2
 import function
-from sklearn.metrics import accuracy_score
+from dxtorchutils.utils.metrics import accuracy
 from torch.utils.data import DataLoader
 import numpy as np
 from dxtorchutils.utils.info_logger import Logger
 from dxtorchutils.utils.utils import state_logger
 import torch
+import matplotlib.pyplot as plt
 
 
 class ValidateVessel:
@@ -20,14 +20,18 @@ class ValidateVessel:
     ):
         self.model = model
         if model_paras_path is not None:
-            self.model = model.load_state_dict(torch.load(model_paras_path))
+            self.model.load_state_dict(torch.load(model_paras_path))
 
         self.is_gpu = False
         self.dataloader = dataloader
-        self.metrics = [accuracy_score]
+        self.metrics = [accuracy]
         self.metric_names = ["accuracy"]
         self.logger = None
         self.is_tensorboard = False
+        self.alter_raw_img_func = None
+        self.alter_label_img_func = None
+        self.alter_prediction_img_func = None
+
         if color_map is None:
             self.color_map = dataloader.dataset.color_map
         else:
@@ -35,7 +39,8 @@ class ValidateVessel:
 
     def validate(self):
         state_logger("Model and Dataset Loaded, Start to Validate!")
-        self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__.lower(), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+        if self.logger is None and self.is_tensorboard:
+            self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__.lower(), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
         if self.is_gpu:
             self.model.cuda()
@@ -72,15 +77,13 @@ class ValidateVessel:
 
                     # prediction color map 回去
                     for pred_idx, color in self.color_map:
-                        iS = np.where(pred == pred_idx)[0]
-                        jS = np.where(pred == pred_idx)[1]
+                        iS, jS = np.where(pred == pred_idx)[0: 2]
                         for i, j in zip(iS, jS):
                             img_pred[i][j] = color
 
                     # label color map 回去
                     for label_idx, color in self.color_map:
-                        iS = np.where(label == label_idx)[0]
-                        jS = np.where(label == label_idx)[1]
+                        iS, jS = np.where(label == label_idx)[0: 2]
                         for i, j in zip(iS, jS):
                             img_label[i][j] = color
 
@@ -89,30 +92,68 @@ class ValidateVessel:
                     img_label = cv2.resize(img_label, (100, int(lw_rate * 100)))
                     img_raw = cv2.resize(img_raw, (100, int(lw_rate * 100)))
 
-                    if len(img_raw.shape) == 2:
-                        img_raw = np.reshape(img_raw, (img_raw.shape[0], img_raw.shape[1], 1))
-                    if len(img_pred.shape) == 2:
-                        img_pred = np.reshape(img_pred, (img_pred.shape[0], img_pred.shape[1], 1))
+
+                    if self.alter_raw_img_func is not None:
+                        img_raw = self.alter_raw_img_func(img_raw)
+
+                    if self.alter_label_img_func is not None:
+                        img_label = self.alter_label_img_func(img_label)
+
+                    if self.alter_prediction_img_func is not None:
+                        img_pred = self.alter_prediction_img_func(img_raw)
+
+
                     if len(img_label.shape) == 2:
                         img_label = np.reshape(img_label, (img_label.shape[0], img_label.shape[1], 1))
 
+
+                    reses = np.zeros(eval_res.shape)
+
                     for idx, metric in enumerate(self.metrics):
                         pre_res = eval_res[idx]
-                        next_res = metric(np.reshape(label, -1), np.reshape(pred, -1))
-                        eval_res[idx] = (pre_res * iteration + next_res) / (iteration + 1)
+                        reses[idx] = metric(np.reshape(label, -1), np.reshape(pred, -1))
+                        eval_res[idx] = (pre_res * iteration + reses[idx]) / (iteration + 1)
+
+
+                    metrics_log = ""
+                    metrics_tb_log = ""
+
+                    for idx, (name, res) in enumerate(zip(self.metric_names, reses)):
+                        if idx == len(self.metric_names) - 1:
+                            metrics_tb_log += "{}:{:.3}".format(name, res)
+                            metrics_log += "| {}: {:.3} |".format(name, res)
+                        else:
+                            metrics_tb_log += "{}:{:.3}/".format(name, res)
+                            metrics_log += "| {}: {:.3} ".format(name, res)
+
 
                     if self.is_tensorboard:
-                        self.logger.add_images("{}:{}".format(
-                            self.metric_names[0], eval_res[0]),
-                            np.array([img_raw, img_label, img_pred]),
-                            iteration,
-                            dataformats="NHWC"
-                        )
+                        fig = plt.figure()
+                        plt.suptitle(metrics_tb_log)
 
-                    if iteration % 10 == 0:
-                        for name, res in zip(self.metric_names, eval_res):
-                            print("| {}: {:.3} ".format(name, res), end="")
-                        print("|\n")
+                        plt.subplot(1, 3, 1)
+                        plt.title("raw image")
+                        plt.axis('off')
+                        if img_raw.shape[-1] == 1:
+                            plt.imshow(img_raw, cmap='gray')
+                        else:
+                            plt.imshow(img_raw)
+
+
+                        plt.subplot(1, 3, 2)
+                        plt.title("ground truth")
+                        plt.axis('off')
+                        plt.imshow(img_label)
+
+
+                        plt.subplot(1, 3, 3)
+                        plt.title("prediction")
+                        plt.axis('off')
+                        plt.imshow(img_pred)
+
+                        self.logger.add_figure("Validate/{}".format(iteration), fig, iteration)
+
+                    print(metrics_log)
 
                     iteration += 1
 
@@ -131,15 +172,11 @@ class ValidateVessel:
     def load_model_para(self, model_paras_path: str):
         self.model.load_state_dict(torch.load(model_paras_path))
 
-    def set_tensorboard_dir(self, path):
+    def enable_tensorboard(self, path=None):
         self.is_tensorboard = True
-        self.logger = Logger(path)
-
-    def disable_tensorboard(self):
-        self.is_tensorboard = False
-
-    def enable_tensorboard(self):
-        self.is_tensorboard = True
+        if path is not None:
+            self.logger = Logger(path)
 
     def multi_gpu(self, device_ids):
+        self.is_gpu = True
         self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)

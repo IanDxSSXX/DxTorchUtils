@@ -1,9 +1,9 @@
 import time
 from torch.utils.data import DataLoader
-from sklearn.metrics import accuracy_score
+from dxtorchutils.utils.metrics import accuracy
 import numpy as np
-from .utils import state_logger
-from .info_logger import Logger
+from dxtorchutils.utils.utils import state_logger
+from dxtorchutils.utils.info_logger import Logger
 import random
 import torch
 
@@ -38,7 +38,7 @@ class TrainVessel:
         self.dataloader = dataloader
         self.epochs = epochs
         self.eval_num = eval_num
-        self.eval_metric_func = accuracy_score
+        self.eval_metric_func = accuracy
         self.eval_metric_name = "accuracy"
         self.logger = None
 
@@ -102,18 +102,18 @@ class TrainVessel:
                           .format(epoch + 1, self.epochs, loss, self.eval_metric_name, eval_res))
 
                     if self.is_tensorboard:
-                        self.logger.log_accuracy(eval_res, loss, epoch)
+                        self.logger.log_metric(eval_res, self.eval_metric_name, loss, epoch)
 
                     if self.model_save_path is not None:
                         if self.is_multi_gpu:
-                            torch.save(self.model.modules.state_dict(), self.model_save_path)
+                            torch.save(self.model.module.state_dict(), self.model_save_path)
                         else:
                             torch.save(self.model.state_dict(), self.model_save_path)
                     else:
                         if self.is_multi_gpu:
-                            torch.save(self.model.modules.state_dict(), self.__class__.__name__.lower() + ".pth")
+                            torch.save(self.model.module.state_dict(), self.model.__class__.__name__.lower() + ".pth")
                         else:
-                            torch.save(self.model.state_dict(), self.__class__.__name__.lower() + ".pth")
+                            torch.save(self.model.state_dict(), self.model.__class__.__name__.lower() + ".pth")
 
                 self.model.train()
 
@@ -140,6 +140,10 @@ class TrainVessel:
             loss = self.criteria(output[0], targets)
             for i in range(1, len(output)):
                 loss += 0.3 * self.criteria(output[i], targets)
+        elif isinstance(output, list):
+            loss = self.criteria(output[0], targets)
+            for i in range(1, len(output)):
+                loss += self.criteria(output[i], targets)
         else:
             loss = self.criteria(output, targets)
         loss.backward()
@@ -181,21 +185,18 @@ class TrainVessel:
     def load_model_para(self, model_paras_path: str):
         self.model.load_state_dict(torch.load(model_paras_path))
 
-    def set_tensorboard_dir(self, path):
-        self.is_tensorboard = True
-        self.logger = Logger(path)
 
-    def disable_tensorboard(self):
-        self.is_tensorboard = False
-
-    def enable_tensorboard(self):
+    def enable_tensorboard(self, path=None):
         self.is_tensorboard = True
+        if path is not None:
+            self.logger = Logger(path)
 
     def save_model_to(self, path):
         self.model_save_path = path
 
     def multi_gpu(self, device_ids):
         self.is_multi_gpu = True
+        self.is_gpu = True
         self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
 
 

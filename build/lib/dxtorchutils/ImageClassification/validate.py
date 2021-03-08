@@ -2,12 +2,13 @@ import time
 
 import cv2
 import function
-from sklearn.metrics import accuracy_score
+from dxtorchutils.utils.metrics import accuracy
 from torch.utils.data import DataLoader
 import numpy as np
-from ..utils.info_logger import Logger
-from ..utils.utils import state_logger
+from dxtorchutils.utils.info_logger import Logger
+from dxtorchutils.utils.utils import state_logger
 import torch
+import matplotlib.pyplot as plt
 
 
 class ValidateVessel:
@@ -23,14 +24,16 @@ class ValidateVessel:
 
         self.is_gpu = False
         self.dataloader = dataloader
-        self.metrics = [accuracy_score]
+        self.metrics = [accuracy]
         self.metric_names = ["accuracy"]
         self.logger = None
         self.is_tensorboard = False
+        self.alter_raw_img_func = None
 
     def validate(self):
         state_logger("Model and Dataset Loaded, Start to Validate!")
-        self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__.lower(), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+        if self.logger is None and self.is_tensorboard:
+            self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__.lower(), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
         if self.is_gpu:
             self.model.cuda()
@@ -67,11 +70,26 @@ class ValidateVessel:
                     if len(raw.shape) == 2:
                         raw = np.reshape(raw, (raw.shape[0], raw.shape[1], 1))
 
+
+                    if self.alter_raw_img_func is not None:
+                        self.alter_raw_img_func(raw)
+
+
                     if self.is_tensorboard:
-                        if label == pred[0]:
-                            self.logger.add_image("True/Label:{} -- Pred:{}".format(label, pred[0]), raw, iteration, dataformats="HWC")
+                        fig = plt.figure()
+                        plt.axis('off')
+
+                        if raw.shape[-1] == 1:
+                            plt.imshow(raw, cmap="gray")
+                            plt.title("Label:{} -- Pred:{}".format(label, pred[0]))
                         else:
-                            self.logger.add_image("False/Label:{} -- Pred:{}".format(label, pred[0]), raw, iteration, dataformats="HWC")
+                            plt.imshow(raw)
+                            plt.title("Label:{} -- Pred:{}".format(label, pred[0]))
+
+                        if label == pred[0]:
+                            self.logger.add_figure("Validate-True/{}".format(iteration), fig, iteration)
+                        else:
+                            self.logger.add_figure("Validate-False/{}".format(iteration), fig, iteration)
 
 
                     for idx, metric in enumerate(self.metrics):
@@ -79,10 +97,9 @@ class ValidateVessel:
                         next_res = metric(np.reshape(label, -1), np.reshape(pred, -1))
                         eval_res[idx] = (pre_res * iteration + next_res) / (iteration + 1)
 
-                    if iteration % 10 == 0:
-                        for name, res in zip(self.metric_names, eval_res):
-                            print("| {}: {:.3} ".format(name, res), end="")
-                        print("|\n")
+                    for name, res in zip(self.metric_names, eval_res):
+                        print("| {}: {:.3} ".format(name, res), end="")
+                    print("|\n")
 
                     iteration += 1
 
@@ -101,15 +118,11 @@ class ValidateVessel:
     def load_model_para(self, model_paras_path: str):
         self.model.load_state_dict(torch.load(model_paras_path))
 
-    def set_tensorboard_dir(self, path):
+    def enable_tensorboard(self, path=None):
         self.is_tensorboard = True
-        self.logger = Logger(path)
-
-    def disable_tensorboard(self):
-        self.is_tensorboard = False
-
-    def enable_tensorboard(self):
-        self.is_tensorboard = True
+        if path is not None:
+            self.logger = Logger(path)
 
     def multi_gpu(self, device_ids):
+        self.is_gpu = True
         self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)

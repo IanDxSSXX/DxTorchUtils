@@ -1,17 +1,29 @@
-"""LeNet 5"""
-import torch
-from torch.nn import *
+"""
+LeNet 5
+    Input: (1, 32, 32)
+    Total params: 61,706
+    Trainable params: 61,706
+    Non-trainable params: 0
+
+    Input size (MB): 0.00
+    Forward/backward pass size (MB): 0.11
+    Params size (MB): 0.24
+    Estimated Total Size (MB): 0.35
+
+    MACs/FLOPs: 424,520
+"""
+from dxtorchutils.utils.layers import *
 
 
 class LeNet5(Module):
     def __init__(self):
         super(LeNet5, self).__init__()
-        self.conv0 = _Conv(1, 6)
-        self.conv1 = _Conv(6, 16)
-        self.conv2 = _Conv(16, 120)
+        self.conv0 = conv_tanh(1, 6, 5)
+        self.conv1 = conv_tanh(6, 16, 5)
+        self.conv2 = conv_tanh(16, 120, 5)
         self.pool0 = AvgPool2d(2)
         self.pool1 = AvgPool2d(2)
-        self.fc = _FC(120, 84)
+        self.fc = fc_tanh(120, 84)
         self.out = Linear(84, 10)
 
     def forward(self, x):
@@ -36,26 +48,14 @@ class LeNet5(Module):
         return output
 
 
+if __name__ == '__main__':
+    # calculate parameters
+    from thop import profile
+    from torchsummary import summary
 
-class _Conv(Module):
-    def __init__(self, in_channels, out_channels):
-        super(_Conv, self).__init__()
-        self.conv = Conv2d(in_channels, out_channels, 5)
+    model = LeNet5()
+    input = torch.randn((1, 1, 32, 32))
+    macs, params = profile(model, inputs=(input, ))
+    summary(model, (1, 32, 32))
 
-    def forward(self, input):
-        x = self.conv(input)
-        output = torch.tanh(x)
-
-        return output
-
-
-class _FC(Module):
-    def __init__(self, in_features, out_features):
-        super(_FC, self).__init__()
-        self.fc = Linear(in_features, out_features)
-
-    def forward(self, input):
-        x = self.fc(input)
-        output = torch.tanh(x)
-
-        return output
+    print("MACs: {}".format(macs))

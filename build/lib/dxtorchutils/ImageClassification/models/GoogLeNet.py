@@ -1,19 +1,31 @@
-"""GoogLeNet v1"""
-from collections import OrderedDict
-import torch
-from torch.nn import *
+"""
+GoogLeNet v1
+    Input: (1, 3, 224, 224)
+
+    Total params: 13,607,784
+    Trainable params: 13,607,784
+    Non-trainable params: 0
+
+    Input size (MB): 0.57
+    Forward/backward pass size (MB): 82.21
+    Params size (MB): 51.91
+    Estimated Total Size (MB): 134.70
+
+    MACs/FLOPs: 2,316,147,760
+"""
+from dxtorchutils.utils.layers import *
 
 
 class GoogLeNet(Module):
-    def __init__(self, num_classes=21):
+    def __init__(self):
         super(GoogLeNet, self).__init__()
-        self.conv0 = _Conv(3, 64, 7, 2, 4)
+        self.conv0 = conv_relu(3, 64, 7, 2, 4)
         self.conv1 = Sequential(
             OrderedDict([
-                ("LRN0", LocalResponseNorm(5)),
-                ("conv0", _Conv(64, 192, 1)),
-                ("conv1", _Conv(192, 192, 3, 1, 1)),
-                ("LRN1", LocalResponseNorm(5))
+                ("normalization0", LocalResponseNorm(5)),
+                ("conv0", conv_relu(64, 192, 1)),
+                ("conv1", conv_relu(192, 192, 3, 1, 1)),
+                ("normalization1", LocalResponseNorm(5))
             ])
         )
 
@@ -34,6 +46,7 @@ class GoogLeNet(Module):
         self.inception3b = _Inception(832, 192, 48, 384, 384, 128, 128)
         self.aux1 = _InceptionAux(512)
         self.aux2 = _InceptionAux(528)
+        self.dropout = Dropout(0.7, True)
         self.out = Linear(1024, 1000)
 
     def forward(self, input):
@@ -71,7 +84,7 @@ class GoogLeNet(Module):
         x = self.inception3b(x)
         # (n, 1024, 7, 7)
         x = self.pool4(x)
-        x = torch.dropout(x, 0.7, self.training)
+        x = self.dropout(x)
         # (n, 1024, 1, 1)
         x = x.view(x.shape[0], -1)
         # (n, 1024)
@@ -86,23 +99,23 @@ class GoogLeNet(Module):
 class _Inception(Module):
     def __init__(self, in_channel, mid_channel2, mid_channel3, out_channel1, out_channel2, out_channel3, out_channel4):
         super(_Inception, self).__init__()
-        self.path1 = _Conv(in_channel, out_channel1, 1)
+        self.path1 = conv_relu(in_channel, out_channel1, 1)
         self.path2 = Sequential(
             OrderedDict([
-                ("conv0", _Conv(in_channel, mid_channel2, 1)),
-                ("conv1", _Conv(mid_channel2, out_channel2, 3, 1, 1))
+                ("conv0", conv_relu(in_channel, mid_channel2, 1)),
+                ("conv1", conv_relu(mid_channel2, out_channel2, 3, 1, 1))
             ])
         )
         self.path3 = Sequential(
             OrderedDict([
-                ("conv0", _Conv(in_channel, mid_channel3, 1)),
-                ("conv1", _Conv(mid_channel3, out_channel3, 5, 1, 2))
+                ("conv0", conv_relu(in_channel, mid_channel3, 1)),
+                ("conv1", conv_relu(mid_channel3, out_channel3, 5, 1, 2))
             ])
         )
         self.path4 = Sequential(
             OrderedDict([
                 ("pool", MaxPool2d(3, 1, 1)),
-                ("conv", _Conv(in_channel, out_channel4, 1))
+                ("conv", conv_relu(in_channel, out_channel4, 1))
             ])
         )
 
@@ -122,43 +135,26 @@ class _InceptionAux(Module):
         self.conv = Sequential(
             OrderedDict([
                 ("pool", AvgPool2d(5, 3)),
-                ("conv", _Conv(in_channel, 128, 1))
+                ("conv", conv_relu(in_channel, 128, 1))
             ])
         )
-        self.fc = _FC(2048, 1024, 1000)
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = x.view(x.shape[0], -1)
-        x = self.fc(x)
-
-        return x
-
-
-
-
-
-class _Conv(Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
-        super(_Conv, self).__init__()
-        self.conv = Conv2d(in_channels, out_channels, kernel_size, stride, padding)
+        self.fc = fc_relu_fc(2048, 1024, 1000)
 
     def forward(self, input):
         x = self.conv(input)
-        output = torch.relu(x)
+        x = x.view(x.shape[0], -1)
+        output = self.fc(x)
 
         return output
 
 
-class _FC(Module):
-    def __init__(self, in_features, mid_features, out_features):
-        super(_FC, self).__init__()
-        self.fc0 = Linear(in_features, mid_features)
-        self.fc1 = Linear(mid_features, out_features)
+if __name__ == '__main__':
+    from thop import profile
+    from torchsummary import summary
 
-    def forward(self, input):
-        x = self.fc0(input)
-        x = torch.relu(x)
-        output = self.fc1(x)
+    model = GoogLeNet()
+    input = torch.randn((1, 3, 224, 224))
+    macs, params = profile(model, inputs=(input, ))
+    summary(model, (3, 224, 224))
 
-        return output
+    print("MACs: {}".format(macs))

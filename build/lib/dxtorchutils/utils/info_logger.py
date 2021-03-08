@@ -11,8 +11,8 @@ class Logger(SummaryWriter):
             self.add_scalar("Training/LearningRate", learning_rate, iteration)
             self.add_scalar("Training/Duration", duration, iteration)
 
-    def log_accuracy(self, accuracy, loss, epoch):
-        self.add_scalar("Training/Eval/Accuracy", accuracy, epoch)
+    def log_metric(self, metric, metric_name, loss,  epoch):
+        self.add_scalar("Training/Eval/{}".format(metric_name), metric, epoch)
         self.add_scalar("Training/Eval/Loss", loss, epoch)
 
 

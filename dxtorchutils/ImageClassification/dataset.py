@@ -56,19 +56,24 @@ class Dataset(data.Dataset):
         stop = 0
         for raw_name in raw_names:
             if raw_name.endswith(self.raw_suffix) and raw_name[0] != ".":
-                raw_id = raw_name.strip(self.raw_head).strip(self.raw_tail).strip(self.raw_suffix)
-                label_name = self.label_head + raw_id + self.label_tail + self.label_suffix
-                if label_name in label_names:
-                    self.image_id.append(raw_id)
+                if len(self.raw_head) < len(raw_name) - (len(self.raw_tail) + len(self.raw_suffix)):
+                    condition1 = raw_name[:len(self.raw_head)] == self.raw_head
+                    condition2 = raw_name[- (len(self.raw_tail) + len(self.raw_suffix)): - len(self.raw_suffix)] == self.raw_tail
+                    condition3 = raw_name[- len(self.raw_suffix):] == self.raw_suffix
+                    if condition1 and condition2 and condition3:
+                        raw_id = raw_name[len(self.raw_head): - (len(self.raw_tail) + len(self.raw_suffix))]
+                        label_name = self.label_head + raw_id + self.label_tail + self.label_suffix
+                        if label_name in label_names:
+                            self.image_id.append(raw_id)
 
-                if stop_at is not None:
-                    if stop == stop_at:
-                        break
-                    stop += 1
+                        if stop_at is not None:
+                            if stop == stop_at:
+                                break
+                            stop += 1
 
         self.raw_func = raw_func
 
-        state_logger("Dataset Prepared!")
+        state_logger("Dataset Prepared! Num: {}".format(len(self.image_id)))
 
     def __len__(self):
         return len(self.image_id)
@@ -96,6 +101,8 @@ class Dataset(data.Dataset):
         label_path = self.label_dir_path + self.label_head + image_id + self.label_tail + self.label_suffix
 
         raw_image = cv2.imread(raw_path)
+        raw_image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB)
+
         with open(label_path, "r") as f:
             label_str = (f.read())
             label = int(re.sub("\D", "", label_str))
@@ -110,9 +117,12 @@ class Dataset(data.Dataset):
             raw_image = raw_image / 255
 
 
+
+
         if data is None:
             return raw_image, label
         else:
             data.append(raw_image)
             target.append(label)
             return data, target
+

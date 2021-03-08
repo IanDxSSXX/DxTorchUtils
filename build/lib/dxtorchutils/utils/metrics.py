@@ -1,38 +1,82 @@
-import time
-
-from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score, f1_score
 import numpy as np
 
-# def confusion_matrix(targets, predictions, labels=None):
-#     pass
+
+def confusion_matrix(targets, predictions, return_categories=False):
+
+    categories = np.unique(np.append(targets, predictions, 0))
+    length = len(categories)
+    matrix = np.zeros((length, length)).astype(np.uint8)
+
+    targets = np.array(targets).flatten()
+    predictions = np.array(predictions).flatten()
+
+    sorted_indices = np.argsort(targets)
+
+    sorted_targets = targets[sorted_indices]
+    sorted_predictions = predictions[sorted_indices]
+
+    sorted_indices = np.argsort(sorted_predictions + sorted_targets * (sorted_targets[-1] + 1))
+
+    sorted_targets = sorted_targets[sorted_indices]
+    sorted_predictions = sorted_predictions[sorted_indices]
+
+    ci = 0
+    cj = 0
+
+    for i in range(len(targets)):
+        while (ci < len(categories)) and (sorted_targets[i] != categories[ci]):
+            ci += 1
+            cj = 0
+
+        while (cj < len(categories)) and (sorted_predictions[i] != categories[cj]):
+            cj += 1
+
+        if (ci < len(categories)) and (cj < len(categories)):
+            matrix[ci][cj] += 1
+
+    if return_categories:
+        return matrix, categories
+    else:
+        return matrix
 
 
 def get_tfpn_s(targets, predictions):
     cm = confusion_matrix(targets, predictions)
-    length = range(len(cm))
 
-    TPs = np.array([cm[i][i] for i in length])
-    FNs = np.array([[cm[i][j] for j in __rm_idx(length, i)] for i in length]).sum(1)
-    FPs = np.array([[cm[j][i] for j in __rm_idx(length, i)] for i in length]).sum(1)
-    TNs = np.array([
-        [[cm[j][k] for k in __rm_idx(length, i)] for j in __rm_idx(length, i)]
-        for i in length]).sum(1).sum(1)
+    TPs = cm.diagonal()
+    FNs = np.sum(cm, 1) - TPs
+    FPs = np.sum(cm, 0) - TPs
+    TNs = [np.array(cm).sum()] * len(cm) - TPs - FNs - FPs
 
     return TPs, FNs, FPs, TNs
 
 
+def get_tfpn_p(targets, predictions, category):
+    cm, cats = confusion_matrix(targets, predictions, True)
+    idxs = np.where(cats == category)[0]
+    if len(idxs) == 0:
+        raise Exception("Wrong specific category")
+    idx = idxs[0]
+
+    TPs = cm.diagonal()
+    FNs = np.sum(cm, 1) - TPs
+    FPs = np.sum(cm, 0) - TPs
+    TNs = [np.array(cm).sum()] * len(cm) - TPs - FNs - FPs
+
+    return TPs[idx], FNs[idx], FPs[idx], TNs[idx]
+
+
 def get_tfpn_m(targets, predictions):
     cm = confusion_matrix(targets, predictions)
-    length = range(len(cm))
 
-    TPs = np.array([cm[i][i] for i in length])
-    FNs = np.array([[cm[i][j] for j in __rm_idx(length, i)] for i in length]).sum(1)
-    FPs = np.array([[cm[j][i] for j in __rm_idx(length, i)] for i in length]).sum(1)
-    TNs = np.array([
-        [[cm[j][k] for k in __rm_idx(length, i)] for j in __rm_idx(length, i)]
-        for i in length]).sum(1).sum(1)
+    total = np.array(cm).sum()
+    TP = cm.diagonal().sum()
+    FN = total - TP
+    FP = FN
+    TN = total * len(cm) - TP - FN - FP
 
-    return TPs.sum(), FNs.sum(), FPs.sum(), TNs.sum()
+
+    return TP, FN, FP, TN
 
 
 def calculate_macro(metric_func, targets, predictions):
@@ -52,6 +96,13 @@ def calculate_macro(metric_func, targets, predictions):
 
 def calculate_micro(metric_func, targets, predictions):
     TP, FN, FP, TN = get_tfpn_m(targets, predictions)
+    metric = metric_func(TP, FN, FP, TN)
+
+    return metric
+
+
+def calculate_pointed(metric_func, targets, predictions, category):
+    TP, FN, FP, TN = get_tfpn_p(targets, predictions, category)
     metric = metric_func(TP, FN, FP, TN)
 
     return metric
@@ -92,14 +143,24 @@ def iou_micro(targets, predictions):
     return calculate_micro(iou_func, targets, predictions)
 
 
-def f_score_micro(targets, predictions, belta=1):
-    f_score_func = lambda tp, fn, fp, tn: \
-        (1 + belta ** 2) * \
-        (
-                (tp / __plus_e_10(tp + fp)) * (tp / __plus_e_10(tp + fn)) /
-                __plus_e_10(belta ** 2 * (tp / __plus_e_10(tp + fp)) + (tp / __plus_e_10(tp + fn)))
-        )
-    return calculate_micro(f_score_func, targets, predictions)
+def iou_pointed(targets, predictions, category):
+    iou_func = lambda tp, fn, fp, tn: tp / __plus_e_10(fp + tp + fn)
+    return calculate_pointed(iou_func, targets, predictions, category)
+
+
+def dice_macro(targets, predictions):
+    dice_func = lambda tp, fn, fp, tn: 2 * tp / __plus_e_10(fp + tp + fn + tn)
+    return calculate_macro(dice_func, targets, predictions)
+
+
+def dice_micro(targets, predictions):
+    dice_func = lambda tp, fn, fp, tn: 2 * tp / __plus_e_10(fp + tp + fn + tn)
+    return calculate_micro(dice_func, targets, predictions)
+
+
+def dice_pointed(targets, predictions, category):
+    dice_func = lambda tp, fn, fp, tn: 2 * tp / __plus_e_10(fp + tp + fn + tn)
+    return calculate_pointed(dice_func, targets, predictions, category)
 
 
 def f_score_macro(targets, predictions, belta=1):
@@ -114,6 +175,17 @@ def f_score_macro(targets, predictions, belta=1):
         f_score_s.append(f_score)
 
     return np.array(f_score_s).mean()
+
+
+def f_score_micro(targets, predictions, belta=1):
+    f_score_func = lambda tp, fn, fp, tn: \
+        (1 + belta ** 2) * \
+        (
+                (tp / __plus_e_10(tp + fp)) * (tp / __plus_e_10(tp + fn)) /
+                __plus_e_10(belta ** 2 * (tp / __plus_e_10(tp + fp)) + (tp / __plus_e_10(tp + fn)))
+        )
+
+    return calculate_micro(f_score_func, targets, predictions)
 
 
 def __plus_e_10(num):
