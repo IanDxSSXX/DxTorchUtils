@@ -315,12 +315,12 @@ def dice_cat(targets, predictions, category):
     return calculate_cat(dice_func, targets, predictions, category)
 
 
-def f_score_macro(targets, predictions, belta=1):
+def f_score_macro(targets, predictions, beta=1):
     """
     先根据每一个类的Tp, FN, FP, TN算 F score，最后再取平均
     :param targets:
     :param predictions:
-    :param belta: 默认 F1 score
+    :param beta: 默认 F1 score
     :return:
     """
     f_score_s = []
@@ -330,25 +330,25 @@ def f_score_macro(targets, predictions, belta=1):
         precision = tp / __plus_e_10(tp + fp)
         recall = tp / __plus_e_10(tp + fn)
 
-        f_score = (1 + belta ** 2) * precision * recall / __plus_e_10(belta ** 2 * precision + recall)
+        f_score = (1 + beta ** 2) * precision * recall / __plus_e_10(beta ** 2 * precision + recall)
         f_score_s.append(f_score)
 
     return np.array(f_score_s).mean()
 
 
-def f_score_micro(targets, predictions, belta=1):
+def f_score_micro(targets, predictions, beta=1):
     """
     直接根据每个类的平均Tp, FN, FP, TN算 F score
     :param targets:
     :param predictions:
-    :param belta: 默认算 F1 score
+    :param beta: 默认算 F1 score
     :return:
     """
     f_score_func = lambda tp, fn, fp, tn: \
-        (1 + belta ** 2) * \
+        (1 + beta ** 2) * \
         (
                 (tp / __plus_e_10(tp + fp)) * (tp / __plus_e_10(tp + fn)) /
-                __plus_e_10(belta ** 2 * (tp / __plus_e_10(tp + fp)) + (tp / __plus_e_10(tp + fn)))
+                __plus_e_10(beta ** 2 * (tp / __plus_e_10(tp + fp)) + (tp / __plus_e_10(tp + fn)))
         )
 
     return calculate_micro(f_score_func, targets, predictions)
