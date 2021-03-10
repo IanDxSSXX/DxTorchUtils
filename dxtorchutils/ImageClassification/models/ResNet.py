@@ -70,6 +70,7 @@ ResNet152
 """
 from dxtorchutils.utils.layers import *
 
+
 class ResNet18(Module):
     def __init__(self):
         super(ResNet18, self).__init__()

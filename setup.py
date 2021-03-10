@@ -3,7 +3,7 @@ import setuptools
 
 setuptools.setup(
     name="dxtorchutils",
-    version="0.0.44",
+    version="0.0.46",
     author="IanDx",
     author_email="IanDxSSXX@gmail.com",
     description="Some utils and models in pytorch",
