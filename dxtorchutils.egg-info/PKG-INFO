@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: dxtorchutils
-Version: 0.0.44
+Version: 0.0.46
 Summary: Some utils and models in pytorch
 Home-page: https://github.com/Ian-Dx/DxTorchUtils
 Author: IanDx
