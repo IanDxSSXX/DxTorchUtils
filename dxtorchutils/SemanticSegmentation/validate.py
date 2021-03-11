@@ -26,6 +26,7 @@ class ValidateVessel:
         self.dataloader = dataloader
         self.metrics = [iou_macro]
         self.metric_names = ["miou"]
+        self.metric_types = ["prediction"]
         self.logger = None
         self.is_tensorboard = False
         self.alter_raw_img_func = None
@@ -52,7 +53,6 @@ class ValidateVessel:
 
         self.model.eval()
 
-        iteration = 1
         eval_res = np.zeros(len(self.metrics))
         eval_res_mean = np.zeros(len(self.metrics))
         count = 0
@@ -73,7 +73,13 @@ class ValidateVessel:
                     # 上一次的结果
                     pre_res = eval_res_mean[idx]
                     # 这一次的结果
-                    eval_res[idx] = metric(np.reshape(targets, -1), np.reshape(predictions, -1))
+                    if self.metric_types == "prediction":
+                        eval_res[idx] = metric(np.reshape(targets, -1), np.reshape(predictions, -1))
+                    else:
+                        temp_targets = np.reshape(targets, -1)
+                        temp_output = np.reshape(output, (len(temp_targets), output.shape[-1]))
+                        eval_res[idx] = metric(temp_targets, temp_output)
+
                     # 这一次平均值的结果
                     eval_res_mean[idx] = (pre_res * count + eval_res[idx]) / (count + 1)
 
@@ -177,9 +183,12 @@ class ValidateVessel:
         state_logger(res_log)
 
 
-    def add_metric(self, metric_name, metric_func: function):
+    def add_metric(self, metric_name, metric_func: function, metric_type="prediction"):
+        assert metric_type in ["prediction", "output"]
         self.metrics.append(metric_func)
         self.metric_names.append(metric_name)
+        self.metric_types.append(metric_type)
+
 
 
     def gpu(self):

@@ -1,5 +1,4 @@
 import os
-import re
 from torch.utils import data
 import cv2
 import torch
@@ -25,6 +24,7 @@ class Dataset(data.Dataset):
         self.data = []
         self.targets = []
         self.stop_at = None
+        self.label = label
 
         if not raw_dir_path.endswith("/"):
             self.raw_dir_path = raw_dir_path + "/"
@@ -32,6 +32,9 @@ class Dataset(data.Dataset):
             self.raw_dir_path = raw_dir_path
 
 
+
+
+    def init(self):
         # 拿到所有的 raw name
         raw_names = os.listdir(self.raw_dir_path)
 
@@ -41,7 +44,7 @@ class Dataset(data.Dataset):
                 raw_dir = self.raw_dir_path + raw_name
                 self.data.append(raw_dir)
                 flag = False
-                if label is None:
+                if self.label is None:
                     # 根据condition得到label
                     for lb, condition in self.lc:
                         if condition(raw_name):
@@ -49,7 +52,7 @@ class Dataset(data.Dataset):
                             flag = False if flag else True
                     assert flag, "Wrong Label and Condition Set!"
                 else:
-                    self.targets.append(label)
+                    self.targets.append(self.label)
 
                 if self.stop_at is not None:
                     if stop == self.stop_at:

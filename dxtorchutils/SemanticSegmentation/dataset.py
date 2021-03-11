@@ -26,12 +26,14 @@ class Dataset(data.Dataset):
         """
         super(Dataset, self).__init__()
 
+
         assert os.path.exists(raw_dir_path), "Wrong raw path: {}".format(raw_dir_path)
         assert os.path.exists(label_dir_path), "Wrong raw path: {}".format(label_dir_path)
 
         self.raw_funcs = []
         self.label_funcs = []
         self.stop_at = None
+        self.image_id = []
         if not raw_dir_path.endswith("/"):
             self.raw_dir_path = raw_dir_path + "/"
         else:
@@ -53,9 +55,30 @@ class Dataset(data.Dataset):
         self.raw_suffix = "." + self.raw_suffix
         self.label_suffix = "." + self.label_suffix
 
+        if color_map is None:
+            # 拿到color map
+            label_paths = []
+            for i in range(20):
+                label_paths.append(
+                    self.label_dir_path + self.label_head + self.image_id[i] + self.label_tail + self.label_suffix
+                )
+            self.color_map = get_color_map(label_paths)
+        else:
+            if isinstance(color_map, int):
+                # 拿到color map
+                label_paths = []
+                for i in range(color_map):
+                    label_paths.append(
+                        self.label_dir_path + self.label_head + self.image_id[i] + self.label_tail + self.label_suffix
+                    )
+                self.color_map = get_color_map(label_paths)
+            else:
+                self.color_map = color_map
+
+
+    def init(self):
         raw_names = os.listdir(self.raw_dir_path)
         label_names = os.listdir(self.label_dir_path)
-        self.image_id = []
 
         stop = 0
         for raw_name in raw_names:
@@ -77,27 +100,6 @@ class Dataset(data.Dataset):
                             if stop == self.stop_at:
                                 break
                             stop += 1
-
-
-        if color_map is None:
-            # 拿到color map
-            label_paths = []
-            for i in range(20):
-                label_paths.append(
-                    self.label_dir_path + self.label_head + self.image_id[i] + self.label_tail + self.label_suffix
-                )
-            self.color_map = get_color_map(label_paths)
-        else:
-            if isinstance(color_map, int):
-                # 拿到color map
-                label_paths = []
-                for i in range(color_map):
-                    label_paths.append(
-                        self.label_dir_path + self.label_head + self.image_id[i] + self.label_tail + self.label_suffix
-                    )
-                self.color_map = get_color_map(label_paths)
-            else:
-                self.color_map = color_map
 
 
         state_logger("Dataset Prepared! Num: {}".format(len(self.image_id)))
