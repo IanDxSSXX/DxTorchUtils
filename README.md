@@ -70,8 +70,10 @@
    * Semantic Segmentation
 
      * FCN8s, 16s, 32s
-     * Unet
+     * Unet, Unet++, Unet+++
      * DeeplabV3
+     * FasterSeg
+     * PSPNet
 
      `from dxtorchutils.SemanticSegmentation.models import *`
 
