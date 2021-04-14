@@ -56,17 +56,25 @@ class ValidateVessel:
                 predictions = torch.max(output, 1)[1].type(torch.LongTensor)
                 targets = targets.type(torch.LongTensor)
 
+                # 开始算准确度，转cpu
+                if self.is_gpu:
+                    predictions = predictions.cpu()
+                    targets = targets.cpu()
+
+                preds = predictions.data.numpy()
+                labels = targets.data.numpy()
+
                 # 遍历所有的评价指标
                 for idx, metric in enumerate(self.metrics):
                     # 上一次的结果
                     pre_res = eval_res_mean[idx]
                     # 这一次的结果
-                    if self.metric_types == "prediction":
-                        eval_res[idx] = metric(np.reshape(targets, -1), np.reshape(predictions, -1))
+                    if self.metric_types[idx] == "prediction":
+                        eval_res[idx] = metric(np.reshape(labels, -1), np.reshape(preds, -1))
                     else:
-                        temp_targets = np.reshape(targets, -1)
-                        temp_output = np.reshape(output, (len(temp_targets), output.shape[-1]))
-                        eval_res[idx] = metric(temp_targets, temp_output)
+                        temp_preds = np.reshape(preds, -1)
+                        temp_labels = np.reshape(labels, (len(temp_preds), -1))
+                        eval_res[idx] = metric(temp_labels, temp_preds)
 
                     # 这一次平均值的结果
                     eval_res_mean[idx] = (pre_res * count + eval_res[idx]) / (count + 1)
@@ -83,12 +91,8 @@ class ValidateVessel:
 
                 if self.is_tensorboard:
                     if self.is_gpu:
-                        predictions = predictions.cpu()
-                        targets = targets.cpu()
                         data = data.cpu()
 
-                    preds = predictions.data.numpy()
-                    labels = targets.data.numpy()
                     raws = data.data.numpy()
 
                     for raw, pred, label in zip(raws, preds, labels):

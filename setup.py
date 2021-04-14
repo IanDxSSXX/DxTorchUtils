@@ -3,7 +3,12 @@ import os
 
 
 def _process_requirements():
-    packages = open('requirements.txt').read().strip().split('\n')
+    packages = """torch>=1.6.0
+    tensorboard>=2.3.0
+    function==1.2.0
+    numpy>=1.19.4
+    opencv-python>=4.4.0.44""".split('\n')
+
     requires = []
     for pkg in packages:
         if pkg.startswith('git+ssh'):
@@ -16,7 +21,7 @@ def _process_requirements():
 
 setuptools.setup(
     name="dxtorchutils",
-    version="0.0.46",
+    version="0.2.8",
     author="IanDx",
     author_email="IanDxSSXX@gmail.com",
     description="Some utils and models in pytorch",

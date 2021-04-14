@@ -469,7 +469,7 @@ def auc_fantastic_thought(targets, output_or_scores):
     return auc
 
 
-def auc_macro(targets, output_or_scores):
+def auc_macro(targets, output):
     """
     auc macro
         二分类：
@@ -492,16 +492,17 @@ def auc_macro(targets, output_or_scores):
     :return:
     """
     targets = np.reshape(targets, -1)
-    output = np.reshape(output_or_scores, (len(targets), -1))
+    output = np.reshape(output, (len(targets), -1))
     # 拉正取平均
     for idx, row in enumerate(output):
         row_sum = row.sum()
         output[idx] += row.min() if row.min() < 0 else 0
         output[idx] /= row_sum
 
+    assert len(targets) < len(output), "give me output"
     if len(set(targets)) == 2:
         scores = output[:, 0]
-        thresholds = np.flipud(np.sort(scores))
+        thresholds = np.flipud(list(set(np.sort(scores))))
         targets_sub = np.where(targets == 0, 0, 1)
         last_tpr = 1
         last_fpr = 1
@@ -529,7 +530,7 @@ def auc_macro(targets, output_or_scores):
         areas = []
         for class_idx in range(output.shape[-1]):
             scores = output[:, class_idx]
-            thresholds = np.flipud(np.sort(scores))
+            thresholds = np.flipud(np.sort(list(set(scores))))
             targets_sub = np.where(targets == class_idx, 0, 1)
             last_tpr = 1
             last_fpr = 1
@@ -577,6 +578,7 @@ def auc_micro(targets, output):
     """
     targets = np.reshape(targets, -1)
     output = np.reshape(output, (len(targets), -1))
+    assert len(targets) < len(output), "give me output"
     # 拉正取平均
     for idx, row in enumerate(output):
         row_sum = row.sum()
@@ -586,7 +588,7 @@ def auc_micro(targets, output):
     if len(set(targets)) == 2:
         # 二分类取第一个，省计算
         scores = output[:, 0]
-        thresholds = np.flipud(np.sort(scores))
+        thresholds = np.flipud(np.sort(list(set(scores))))
         targets_sub = np.where(targets == 0, 0, 1)
         last_tpr = 1
         last_fpr = 1
@@ -618,15 +620,9 @@ def auc_micro(targets, output):
 
         targets = np.reshape(new_targets, -1)
 
-        # 拉正取平均
-        for idx, row in enumerate(output):
-            row_sum = row.sum()
-            output[idx] += row.min() if row.min() < 0 else 0
-            output[idx] /= row_sum
-
         scores = np.reshape(output, -1)
 
-        thresholds = np.flipud(np.sort(scores))
+        thresholds = np.flipud(np.sort(list(set(scores))))
         last_tpr = 1
         last_fpr = 1
         area = 0
@@ -672,7 +668,7 @@ def auc_cat(targets, scores, cat=1):
     if scores.shape[-1] == 1:
         assert len(set(targets)) == 2, "Need all scores for multi-class"
         scores = np.squeeze(scores)
-        thresholds = np.flipud(np.sort(scores))
+        thresholds = np.flipud(np.sort(list(set(scores))))
 
         last_tpr = 1
         last_fpr = 1
@@ -702,9 +698,8 @@ def auc_cat(targets, scores, cat=1):
             scores[idx] += row.min() if row.min() < 0 else 0
             scores[idx] /= row_sum
 
-        col = 0 if cat == 1 else 0
-        scores = scores[:, col]
-        thresholds = np.flipud(np.sort(scores))
+        scores = scores[: cat]
+        thresholds = np.flipud(np.sort(list(set(scores))))
         targets_sub = np.where(targets == 0, 0, 1)
         last_tpr = 1
         last_fpr = 1
