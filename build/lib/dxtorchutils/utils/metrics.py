@@ -203,7 +203,7 @@ def recall_micro(targets, predictions):
     return calculate_micro(recall_func, targets, predictions)
 
 
-def recall_cat(targets, predictions, category):
+def recall_cat(targets, predictions, category=1):
     """
     给定类，根据特定类的Tp, FN, FP, TN算其recall
     :param targets:
@@ -236,7 +236,7 @@ def precision_micro(targets, predictions):
     return calculate_micro(precision_func, targets, predictions)
 
 
-def precision_cat(targets, predictions, category):
+def precision_cat(targets, predictions, category=1):
     """
     给定类，根据特定类的Tp, FN, FP, TN算其precision
     :param targets:
@@ -269,7 +269,7 @@ def iou_micro(targets, predictions):
     return calculate_micro(iou_func, targets, predictions)
 
 
-def iou_cat(targets, predictions, category):
+def iou_cat(targets, predictions, category=1):
     """
     给定类，根据特定类的Tp, FN, FP, TN算其iou
     :param targets:
@@ -303,7 +303,7 @@ def dice_micro(targets, predictions):
     return calculate_micro(dice_func, targets, predictions)
 
 
-def dice_cat(targets, predictions, category):
+def dice_cat(targets, predictions, category=1):
     """
     给定类，根据特定类的Tp, FN, FP, TN算其dice
     :param targets:
@@ -315,12 +315,12 @@ def dice_cat(targets, predictions, category):
     return calculate_cat(dice_func, targets, predictions, category)
 
 
-def f_score_macro(targets, predictions, belta=1):
+def f_score_macro(targets, predictions, beta=1):
     """
     先根据每一个类的Tp, FN, FP, TN算 F score，最后再取平均
     :param targets:
     :param predictions:
-    :param belta: 默认 F1 score
+    :param beta: 默认 F1 score
     :return:
     """
     f_score_s = []
@@ -330,28 +330,398 @@ def f_score_macro(targets, predictions, belta=1):
         precision = tp / __plus_e_10(tp + fp)
         recall = tp / __plus_e_10(tp + fn)
 
-        f_score = (1 + belta ** 2) * precision * recall / __plus_e_10(belta ** 2 * precision + recall)
+        f_score = (1 + beta ** 2) * precision * recall / __plus_e_10(beta ** 2 * precision + recall)
         f_score_s.append(f_score)
 
     return np.array(f_score_s).mean()
 
 
-def f_score_micro(targets, predictions, belta=1):
+def f_score_micro(targets, predictions, beta=1):
     """
     直接根据每个类的平均Tp, FN, FP, TN算 F score
     :param targets:
     :param predictions:
-    :param belta: 默认算 F1 score
+    :param beta: 默认算 F1 score
     :return:
     """
     f_score_func = lambda tp, fn, fp, tn: \
-        (1 + belta ** 2) * \
+        (1 + beta ** 2) * \
         (
                 (tp / __plus_e_10(tp + fp)) * (tp / __plus_e_10(tp + fn)) /
-                __plus_e_10(belta ** 2 * (tp / __plus_e_10(tp + fp)) + (tp / __plus_e_10(tp + fn)))
+                __plus_e_10(beta ** 2 * (tp / __plus_e_10(tp + fp)) + (tp / __plus_e_10(tp + fn)))
         )
 
     return calculate_micro(f_score_func, targets, predictions)
+
+
+def f_score_cat(targets, predictions, category=1, beta=1):
+    """
+    指定类型都f score
+    :param targets:
+    :param predictions:
+    :param beta: 默认 F1 score
+    :return:
+    """
+    TPs, FNs, FPs, TNs = get_tfpn_arr(targets, predictions)
+
+    tp, fn, fp, tn = zip(TPs[category], FNs[category], FPs[category], TNs[category])
+    precision = tp / __plus_e_10(tp + fp)
+    recall = tp / __plus_e_10(tp + fn)
+
+    f_score = (1 + beta ** 2) * precision * recall / __plus_e_10(beta ** 2 * precision + recall)
+
+    return f_score
+
+
+def auc_fantastic_thought(targets, output_or_scores):
+    """
+    虽然没有使用，但是感觉方法一下点透了auc的本质，用法的话是 macro
+    :param targets:
+    :param output_or_scores:
+    :return:
+    """
+    targets = np.reshape(targets, -1)
+    output = np.reshape(output_or_scores, (len(targets), -1))
+    if output.shape[-1] == 1:
+        assert len(set(targets)) == 2, "Need all scores for multi-class"
+        scores = output
+
+        # score排序
+        sorted_indices = np.argsort(scores)
+        sorted_indices = np.flipud(sorted_indices)
+        sorted_targets = targets[sorted_indices]
+
+        # 所有正样本
+        positive_idxs = np.where(sorted_targets == 0)[0]
+
+        # M 为正样本数，N 为负样本数
+        M = len(positive_idxs)
+        N = len(targets) - M
+
+        auc = 0
+        for positive_idx in positive_idxs:
+            # positive_idx就是rank_i
+            auc += positive_idx + 1
+
+        # AUC = \frac{\sum_{i\in positiveClass} rank_i - M(1+M)/2}{M * N}
+        auc = (auc - (1 + M) * M / 2) / (M * N)
+
+    else:
+        # 拉到正数取均值得到概率
+        for idx, row in enumerate(output):
+            row_sum = row.sum()
+            output[idx] += row.min() if row.min() < 0 else 0
+            output[idx] /= row_sum
+
+        if len(set(targets)) == 2:
+            # 二分类问题取第一个就行
+            scores = output[:, 0]
+
+            # score排序
+            sorted_indices = np.argsort(scores)
+            sorted_indices = np.flipud(sorted_indices)
+            sorted_targets = targets[sorted_indices]
+
+            # 所有正样本
+            positive_idxs = np.where(sorted_targets == 0)[0]
+
+            # M 为正样本数，N 为负样本数
+            M = len(positive_idxs)
+            N = len(targets) - M
+
+            auc = 0
+            for positive_idx in positive_idxs:
+                # positive_idx就是rank_i
+                auc += positive_idx + 1
+
+            # AUC = \frac{\sum_{i\in positiveClass} rank_i - M(1+M)/2}{M * N}
+            auc = (auc - (1 + M) * M / 2) / (M * N)
+        else:
+            # 多分类
+            aucs = []
+            for class_idx in range(output.shape[-1]):
+                scores = output[:, class_idx]
+
+                # score排序
+                sorted_indices = np.argsort(scores)
+                sorted_indices = np.flipud(sorted_indices)
+                sorted_targets = targets[sorted_indices]
+
+                # 所有正样本
+                positive_idxs = np.where(sorted_targets == class_idx)[0]
+
+                # M 为正样本数，N 为负样本数
+                M = len(positive_idxs)
+                N = len(targets) - M
+
+                auc = 0
+                for positive_idx in positive_idxs:
+                    # positive_idx就是rank_i
+                    auc += positive_idx + 1
+
+                # AUC = \frac{\sum_{i\in positiveClass} rank_i - M(1+M)/2}{M * N}
+                auc = (auc - (1 + M) * M / 2) / (M * N)
+
+                aucs.append(auc)
+
+            auc = np.array(aucs).mean()
+
+    return auc
+
+
+def auc_macro(targets, output_or_scores):
+    """
+    auc macro
+        二分类：
+            targets = [1, 0, 1, 0]
+            scores = [0.9, 0.2, 0.7, 0.3]
+            auc = auc_macro(targets, scores)
+
+        二/多分类：
+            targets = [1, 2, 1, 0]
+            # 直接经过神经网络
+            output = [[0.2, 0.3, 0.5],
+                      [0.1 ,0.8, 0.1],
+                      [0.3, 0.2, 0.5],
+                      [0.7, 0.1, 0.2]]
+
+            auc = auc_macro(targets, output)
+
+    :param targets:
+    :param output_or_scores:
+    :return:
+    """
+    targets = np.reshape(targets, -1)
+    output = np.reshape(output_or_scores, (len(targets), -1))
+    # 拉正取平均
+    for idx, row in enumerate(output):
+        row_sum = row.sum()
+        output[idx] += row.min() if row.min() < 0 else 0
+        output[idx] /= row_sum
+
+    if len(set(targets)) == 2:
+        scores = output[:, 0]
+        thresholds = np.flipud(list(set(np.sort(scores))))
+        targets_sub = np.where(targets == 0, 0, 1)
+        last_tpr = 1
+        last_fpr = 1
+        area = 0
+        for threshold in thresholds:
+            predictions = np.where(scores >= threshold, 1, 0)
+
+            tp, fn, fp, tn = get_tfpn_arr(targets_sub, predictions)
+
+            # 取混淆矩阵
+            # 横坐标
+            fpr = fp[0] / (tn[0] + fp[0])
+            # 纵坐标
+            tpr = tp[0] / (tp[0] + fn[0])
+
+            # 梯形面积
+            area += (last_fpr - fpr) * (tpr + last_tpr) / 2
+
+            last_fpr = fpr
+            last_tpr = tpr
+
+            auc = area
+    else:
+        # 多分类，将每一个分类都看成二分类
+        areas = []
+        for class_idx in range(output.shape[-1]):
+            scores = output[:, class_idx]
+            thresholds = np.flipud(list(set(np.sort(scores))))
+            targets_sub = np.where(targets == class_idx, 0, 1)
+            last_tpr = 1
+            last_fpr = 1
+            area = 0
+            for threshold in thresholds:
+                predictions = np.where(scores >= threshold, 1, 0)
+
+                tp, fn, fp, tn = get_tfpn_arr(targets_sub, predictions)
+
+                # 取混淆矩阵
+                # 横坐标
+                fpr = fp[0] / (tn[0] + fp[0])
+                # 纵坐标
+                tpr = tp[0] / (tp[0] + fn[0])
+
+                # 梯形面积
+                area += (last_fpr - fpr) * (tpr + last_tpr) / 2
+
+                last_fpr = fpr
+                last_tpr = tpr
+
+            areas.append(area)
+
+            auc = np.array(areas).mean()
+
+    return auc
+
+
+def auc_micro(targets, output):
+    """
+    auc micro
+        二/多分类：
+            targets = [1, 2, 1, 0]
+            # 直接经过神经网络
+            output = [[0.2, 0.3, 0.5],
+                      [0.1 ,0.8, 0.1],
+                      [0.3, 0.2, 0.5],
+                      [0.7, 0.1, 0.2]]
+
+            auc = auc_micro(targets, output)
+
+    :param targets:
+    :param output:
+    :return:
+    """
+    targets = np.reshape(targets, -1)
+    output = np.reshape(output, (len(targets), -1))
+    # 拉正取平均
+    for idx, row in enumerate(output):
+        row_sum = row.sum()
+        output[idx] += row.min() if row.min() < 0 else 0
+        output[idx] /= row_sum
+
+    if len(set(targets)) == 2:
+        # 二分类取第一个，省计算
+        scores = output[:, 0]
+        thresholds = np.flipud(list(set(np.sort(scores))))
+        targets_sub = np.where(targets == 0, 0, 1)
+        last_tpr = 1
+        last_fpr = 1
+        area = 0
+        for threshold in thresholds:
+            predictions = np.where(scores >= threshold, 1, 0)
+
+            tp, fn, fp, tn = get_tfpn_arr(targets_sub, predictions)
+
+            # 取混淆矩阵
+            # 横坐标
+            fpr = fp[0] / (tn[0] + fp[0])
+            # 纵坐标
+            tpr = tp[0] / (tp[0] + fn[0])
+
+            # 梯形面积
+            area += (last_fpr - fpr) * (tpr + last_tpr) / 2
+
+            last_fpr = fpr
+            last_tpr = tpr
+
+            auc = area
+    else:
+        # 多分类 micro 直接用one-hot编码展开，对应scores
+        # one-hot
+        new_targets = np.zeros((len(targets), len(set(targets))))
+        for idx, target in enumerate(targets):
+            new_targets[idx][target] = 1
+
+        targets = np.reshape(new_targets, -1)
+
+        scores = np.reshape(output, -1)
+
+        thresholds = np.flipud(list(set(np.sort(scores))))
+        last_tpr = 1
+        last_fpr = 1
+        area = 0
+        for threshold in thresholds:
+            predictions = np.where(scores >= threshold, 1, 0)
+
+
+            tp, fn, fp, tn = get_tfpn_arr(targets, predictions)
+
+            # 取混淆矩阵
+            # 横坐标
+            fpr = fp[0] / (tn[0] + fp[0])
+            # 纵坐标
+            tpr = tp[0] / (tp[0] + fn[0])
+
+            # 梯形面积
+            area += (last_fpr - fpr) * (tpr + last_tpr) / 2
+
+            last_fpr = fpr
+            last_tpr = tpr
+
+            auc = area
+
+    return auc
+
+
+def auc_cat(targets, scores, cat=1):
+    """
+    指定auc
+        二分类：
+            targets = [1, 0, 1, 0]
+            scores = [0.9, 0.2, 0.7, 0.3]
+            auc = auc_micro(targets, scores)
+
+    :param targets:
+    :param scores:
+    :param cat:
+    :return:
+    """
+    targets = np.reshape(targets, -1)
+    scores = np.reshape(scores, (len(targets), -1))
+
+    if scores.shape[-1] == 1:
+        assert len(set(targets)) == 2, "Need all scores for multi-class"
+        scores = np.squeeze(scores)
+        thresholds = np.flipud(list(set(np.sort(scores))))
+
+        last_tpr = 1
+        last_fpr = 1
+        area = 0
+        for threshold in thresholds:
+            predictions = np.where(scores >= threshold, 1, 0)
+
+            tp, fn, fp, tn = get_tfpn_arr(targets, predictions)
+
+            # 取混淆矩阵
+            # 横坐标
+            fpr = fp[0] / (tn[0] + fp[0])
+            # 纵坐标
+            tpr = tp[0] / (tp[0] + fn[0])
+
+            # 梯形面积
+            area += (last_fpr - fpr) * (tpr + last_tpr) / 2
+
+            last_fpr = fpr
+            last_tpr = tpr
+
+        auc = area
+
+    else:
+        for idx, row in enumerate(scores):
+            row_sum = row.sum()
+            scores[idx] += row.min() if row.min() < 0 else 0
+            scores[idx] /= row_sum
+
+        scores = scores[: cat]
+        thresholds = np.flipud(list(set(np.sort(scores))))
+        targets_sub = np.where(targets == 0, 0, 1)
+        last_tpr = 1
+        last_fpr = 1
+        area = 0
+        for threshold in thresholds:
+            predictions = np.where(scores >= threshold, 1, 0)
+
+            tp, fn, fp, tn = get_tfpn_arr(targets_sub, predictions)
+
+            # 取混淆矩阵
+            # 横坐标
+            fpr = fp[0] / (tn[0] + fp[0])
+            # 纵坐标
+            tpr = tp[0] / (tp[0] + fn[0])
+
+            # 梯形面积
+            area += (last_fpr - fpr) * (tpr + last_tpr) / 2
+
+            last_fpr = fpr
+            last_tpr = tpr
+
+            auc = area
+
+    return auc
 
 
 def __plus_e_10(num):

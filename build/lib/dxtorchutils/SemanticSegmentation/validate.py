@@ -26,6 +26,7 @@ class ValidateVessel:
         self.dataloader = dataloader
         self.metrics = [iou_macro]
         self.metric_names = ["miou"]
+        self.metric_types = ["prediction"]
         self.logger = None
         self.is_tensorboard = False
         self.alter_raw_img_func = None
@@ -33,13 +34,14 @@ class ValidateVessel:
         self.alter_prediction_img_func = None
         self.tensorboard_display_image_width = 200
 
+
         if color_map is None:
             if hasattr(dataloader.dataset, "color_map"):
                 self.color_map = dataloader.dataset.color_map
         else:
             self.color_map = color_map
 
-        assert color_map is not None, "No color map provided!"
+        assert self.color_map is not None, "No color map provided!"
 
     def validate(self):
         state_logger("Model and Dataset Loaded, Start to Validate!")
@@ -52,7 +54,6 @@ class ValidateVessel:
 
         self.model.eval()
 
-        iteration = 1
         eval_res = np.zeros(len(self.metrics))
         eval_res_mean = np.zeros(len(self.metrics))
         count = 0
@@ -68,12 +69,26 @@ class ValidateVessel:
                 predictions = torch.max(output, 1)[1].type(torch.LongTensor)
                 targets = targets.type(torch.LongTensor)
 
+                # 开始算准确度，转cpu
+                if self.is_gpu:
+                    predictions = predictions.cpu()
+                    targets = targets.cpu()
+
+                preds = predictions.data.numpy()
+                labels = targets.data.numpy()
+
                 # 遍历所有的评价指标
                 for idx, metric in enumerate(self.metrics):
                     # 上一次的结果
                     pre_res = eval_res_mean[idx]
                     # 这一次的结果
-                    eval_res[idx] = metric(np.reshape(targets, -1), np.reshape(predictions, -1))
+                    if self.metric_types[idx] == "prediction":
+                        eval_res[idx] = metric(np.reshape(labels, -1), np.reshape(preds, -1))
+                    else:
+                        temp_preds = np.reshape(preds, -1)
+                        temp_labels = np.reshape(labels, (len(temp_preds), -1))
+                        eval_res[idx] = metric(temp_labels, temp_preds)
+
                     # 这一次平均值的结果
                     eval_res_mean[idx] = (pre_res * count + eval_res[idx]) / (count + 1)
 
@@ -84,18 +99,17 @@ class ValidateVessel:
                 for name, res_mean, res in zip(self.metric_names, eval_res_mean, eval_res):
                     log_metric += "| {}: {:.4}(Mean) {:.4}(ThisBatch) ".format(name, res_mean, res)
 
+                print(log_metric)
 
                 if self.is_tensorboard:
                     if self.is_gpu:
-                        predictions = predictions.cpu()
-                        targets = targets.cpu()
                         data = data.cpu()
 
                     # 转成对每张图进行操作
-                    for pred, label, raw in zip(predictions.data.numpy(), targets.data.numpy(), data.data.numpy()):
+                    for pred, label, raw in zip(preds, labels, data.data.numpy()):
                         img_pred = (np.zeros((pred.shape[0], pred.shape[1], 3))).astype(np.uint8)
                         img_label = (np.zeros((label.shape[0], label.shape[1], 3))).astype(np.uint8)
-                        img_raw = (np.reshape(raw, raw.shape[1:]).transpose(1, 2, 0) * 255).astype(np.uint8)
+                        img_raw = (raw.transpose(1, 2, 0) * 255).astype(np.uint8)
 
                         # prediction color map 回去
                         for pred_idx, color in self.color_map:
@@ -177,9 +191,12 @@ class ValidateVessel:
         state_logger(res_log)
 
 
-    def add_metric(self, metric_name, metric_func: function):
+    def add_metric(self, metric_name, metric_func: function, metric_type="prediction"):
+        assert metric_type in ["prediction", "output"]
         self.metrics.append(metric_func)
         self.metric_names.append(metric_name)
+        self.metric_types.append(metric_type)
+
 
 
     def gpu(self):

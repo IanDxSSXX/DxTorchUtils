@@ -1,13 +1,18 @@
+import bisect
 import os
+import warnings
+
 import function
 from torch.utils import data
 import cv2
 import torch
 import numpy as np
+from torch.utils.data import IterableDataset
+
 from dxtorchutils.utils.utils import state_logger
 
 
-class Dataset(data.Dataset):
+class DatasetConfig:
     def __init__(
             self,
             raw_dir_path: str,
@@ -24,7 +29,8 @@ class Dataset(data.Dataset):
         :param color_map: 颜色的map，如果不填，自动读前10张的所有类型，填int类型，读前n张的所有类型，
                             e.g. [[0, [0, 0, 255], [1, [255, 0, 0]]]
         """
-        super(Dataset, self).__init__()
+        super(DatasetConfig, self).__init__()
+
 
         assert os.path.exists(raw_dir_path), "Wrong raw path: {}".format(raw_dir_path)
         assert os.path.exists(label_dir_path), "Wrong raw path: {}".format(label_dir_path)
@@ -32,6 +38,7 @@ class Dataset(data.Dataset):
         self.raw_funcs = []
         self.label_funcs = []
         self.stop_at = None
+        self.image_id = []
         if not raw_dir_path.endswith("/"):
             self.raw_dir_path = raw_dir_path + "/"
         else:
@@ -53,9 +60,11 @@ class Dataset(data.Dataset):
         self.raw_suffix = "." + self.raw_suffix
         self.label_suffix = "." + self.label_suffix
 
+        self.color_map = color_map
+
+    def all_set_up(self):
         raw_names = os.listdir(self.raw_dir_path)
         label_names = os.listdir(self.label_dir_path)
-        self.image_id = []
 
         stop = 0
         for raw_name in raw_names:
@@ -74,90 +83,12 @@ class Dataset(data.Dataset):
                                 self.image_id.append(raw_id)
 
                         if self.stop_at is not None:
+                            stop += 1
                             if stop == self.stop_at:
                                 break
-                            stop += 1
-
-
-        if color_map is None:
-            # 拿到color map
-            label_paths = []
-            for i in range(20):
-                label_paths.append(
-                    self.label_dir_path + self.label_head + self.image_id[i] + self.label_tail + self.label_suffix
-                )
-            self.color_map = get_color_map(label_paths)
-        else:
-            if isinstance(color_map, int):
-                # 拿到color map
-                label_paths = []
-                for i in range(color_map):
-                    label_paths.append(
-                        self.label_dir_path + self.label_head + self.image_id[i] + self.label_tail + self.label_suffix
-                    )
-                self.color_map = get_color_map(label_paths)
-            else:
-                self.color_map = color_map
 
 
         state_logger("Dataset Prepared! Num: {}".format(len(self.image_id)))
-
-    def __len__(self):
-        return len(self.image_id)
-
-    def __getitem__(self, index):
-        image_id = self.image_id[index]
-
-        if isinstance(image_id, list):
-            data = []
-            targets = []
-            image_ids = image_id
-            for image_id in image_ids:
-                data, targets = self.get_data_target(image_id, data, targets)
-
-        else:
-            data, targets = self.get_data_target(image_id)
-
-        data = torch.from_numpy(np.array(data)).type(torch.FloatTensor)
-        targets = torch.from_numpy(np.array(targets)).type(torch.LongTensor)
-
-        return data, targets
-
-    def get_data_target(self, image_id, data=None, targets=None):
-        raw_path = self.raw_dir_path + self.raw_head + image_id + self.raw_tail + self.raw_suffix
-        label_path = self.label_dir_path + self.label_head + image_id + self.label_tail + self.label_suffix
-
-        raw_image = cv2.imread(raw_path)
-        raw_image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB)
-        label_image = cv2.imread(label_path)
-        label_image = cv2.cvtColor(label_image, cv2.COLOR_BGR2RGB)
-
-
-        for raw_func in self.raw_funcs:
-            raw_image = raw_func(raw_image)
-
-        if len(np.array(list(raw_image.shape))) == 3:
-            raw_image = raw_image.transpose(2, 0, 1)
-
-        if raw_image.dtype == "uint8":
-            raw_image = raw_image / 255
-
-        for label_func in self.label_funcs is not None:
-            label_image = label_func(label_image)
-
-        target_image = np.zeros(label_image.shape[:2])
-
-        # 注意-1的操作，这样加快很多
-        for idx, color in self.color_map:
-            target_image = np.where((label_image == color).all(axis=-1), idx, target_image)
-
-        if data is None:
-            return raw_image, target_image
-        else:
-            data.append(raw_image)
-            targets.append(target_image)
-
-            return data, targets
 
 
     def add_raw_func(self, *raw_funcs):
@@ -205,6 +136,19 @@ class Dataset(data.Dataset):
         for label_func in label_funcs:
             self.label_funcs.append(label_func)
 
+
+    def resize_label(self, dsize, dst=None, fx=None, fy=None, interpolation=cv2.INTER_NEAREST):
+        """
+        resize标签
+        :param dsize:
+        :param dst:
+        :param fx:
+        :param fy:
+        :param interpolation:
+        :return:
+        """
+        self.label_funcs.append(lambda img: cv2.resize(img, dsize, dst, fx, fy, interpolation))
+
     def stop_at_idx(self, stop_at):
         """
         只读前stop_at张图，多用于测试
@@ -212,6 +156,166 @@ class Dataset(data.Dataset):
         :return:
         """
         self.stop_at = stop_at
+
+
+class SingleDataset(data.Dataset):
+    def __init__(self, dataset_config: DatasetConfig):
+        super(SingleDataset, self).__init__()
+        dataset_config.all_set_up()
+
+        self.image_id = dataset_config.image_id
+        self.raw_dir_path = dataset_config.raw_dir_path
+        self.raw_head = dataset_config.raw_head
+        self.raw_tail = dataset_config.raw_tail
+        self.raw_suffix = dataset_config.raw_suffix
+        self.label_dir_path = dataset_config.label_dir_path
+        self.label_head = dataset_config.label_head
+        self.label_tail = dataset_config.label_tail
+        self.label_suffix = dataset_config.label_suffix
+        self.raw_funcs = dataset_config.raw_funcs
+        self.label_funcs = dataset_config.label_funcs
+
+        if dataset_config.color_map is None:
+            # 拿到color map
+            label_paths = []
+            for i in range(20):
+                label_paths.append(
+                    self.label_dir_path + self.label_head + self.image_id[i] + self.label_tail + self.label_suffix
+                )
+            self.color_map = get_color_map(label_paths)
+        elif isinstance(dataset_config.color_map, int):
+            # 拿到color map
+            label_paths = []
+            for i in range(dataset_config.color_map):
+                label_paths.append(
+                    self.label_dir_path + self.label_head + self.image_id[i] + self.label_tail + self.label_suffix
+                )
+            self.color_map = get_color_map(label_paths)
+        else:
+            self.color_map = dataset_config.color_map
+
+    def __len__(self):
+        return len(self.image_id)
+
+    def __getitem__(self, index):
+        image_id = self.image_id[index]
+
+        if isinstance(image_id, list):
+            data = []
+            targets = []
+            image_ids = image_id
+            for image_id in image_ids:
+                data, targets = self.get_data_target(image_id, data, targets)
+
+        else:
+            data, targets = self.get_data_target(image_id)
+
+        data = torch.from_numpy(np.array(data)).type(torch.FloatTensor)
+        targets = torch.from_numpy(np.array(targets)).type(torch.LongTensor)
+
+        return data, targets
+
+    def get_data_target(self, image_id, data=None, targets=None):
+        raw_path = self.raw_dir_path + self.raw_head + image_id + self.raw_tail + self.raw_suffix
+        label_path = self.label_dir_path + self.label_head + image_id + self.label_tail + self.label_suffix
+
+        raw_image = cv2.imread(raw_path)
+        raw_image = cv2.cvtColor(raw_image, cv2.COLOR_BGR2RGB)
+        label_image = cv2.imread(label_path)
+        label_image = cv2.cvtColor(label_image, cv2.COLOR_BGR2RGB)
+
+
+        for raw_func in self.raw_funcs:
+            raw_image = raw_func(raw_image)
+
+        if len(np.array(list(raw_image.shape))) == 3:
+            raw_image = raw_image.transpose(2, 0, 1)
+
+        if len(np.array(list(raw_image.shape))) == 2:
+            raw_image = np.reshape(raw_image, (1, raw_image.shape[0], raw_image.shape[1]))
+
+        if raw_image.dtype == "uint8":
+            raw_image = raw_image / 255
+
+        for label_func in self.label_funcs:
+            label_image = label_func(label_image)
+
+        target_image = np.zeros(label_image.shape[:2])
+
+        # 注意-1的操作，这样加快很多
+        for idx, color in self.color_map:
+            target_image = np.where((label_image == color).all(axis=-1), idx, target_image)
+
+        if data is None:
+            return raw_image, target_image
+        else:
+            data.append(raw_image)
+            targets.append(target_image)
+
+            return data, targets
+
+
+
+class Dataset(data.Dataset):
+    r"""Dataset as a concatenation of multiple datasets.
+
+    This class is useful to assemble different existing datasets.
+
+    Arguments:
+        datasets (sequence): List of datasets to be concatenated
+    """
+
+    @staticmethod
+    def cumsum(sequence):
+        r, s = [], 0
+        for e in sequence:
+            l = len(e)
+            r.append(l + s)
+            s += l
+        return r
+
+    def __init__(self, *dataset_configs):
+        super(Dataset, self).__init__()
+        datasets = []
+        self.color_map = None
+        if isinstance(dataset_configs[0], list):
+            for dataset_config in dataset_configs[0]:
+                dataset = SingleDataset(dataset_config)
+                datasets.append(dataset)
+                if self.color_map is None:
+                    self.color_map = dataset.color_map
+        else:
+            for dataset_config in dataset_configs:
+                dataset = SingleDataset(dataset_config)
+                datasets.append(dataset)
+                if self.color_map is None:
+                    self.color_map = dataset.color_map
+
+        self.datasets = list(datasets)
+        for d in self.datasets:
+            assert not isinstance(d, IterableDataset), "ConcatDataset does not support IterableDataset"
+        self.cumulative_sizes = self.cumsum(self.datasets)
+
+    def __len__(self):
+        return self.cumulative_sizes[-1]
+
+    def __getitem__(self, idx):
+        if idx < 0:
+            if -idx > len(self):
+                raise ValueError("absolute value of index should not exceed dataset length")
+            idx = len(self) + idx
+        dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
+        if dataset_idx == 0:
+            sample_idx = idx
+        else:
+            sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
+        return self.datasets[dataset_idx][sample_idx]
+
+    @property
+    def cummulative_sizes(self):
+        warnings.warn("cummulative_sizes attribute is renamed to "
+                      "cumulative_sizes", DeprecationWarning, stacklevel=2)
+        return self.cumulative_sizes
 
 
 def get_color_map(*label_paths):
@@ -261,4 +365,3 @@ def get_color_map_from_images(*images):
     color_map = [[idx, color] for idx, color in enumerate(colors)]
 
     return color_map
-
