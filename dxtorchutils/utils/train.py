@@ -32,12 +32,15 @@ class TrainVessel:
         """
 
         self.model = model
+        self.model_name = self.model.__class__.__name__.lower()
         self.is_gpu = False
         self.is_multi_gpu = False
+        self.device = torch.device("cpu")
+
         self.is_tensorboard = False
         self.dataloader = dataloader
         self.epochs = epochs
-        self.eval_num = eval_num
+        self.eval_num = dataloader.batch_size if eval_num is None else eval_num
         self.eval_metric_func = accuracy
         self.eval_metric_name = "accuracy"
         self.logger = None
@@ -49,32 +52,30 @@ class TrainVessel:
         self.eval_res_all = None
         self.log_every_epoch = 1
 
+        self.opt = torch.optim.SGD(model.parameters(), 5e-4, 0.9) if opt is None else opt
+        self.criteria = torch.nn.CrossEntropyLoss() if criteria is None else criteria
+
         if model_paras_path is not None:
             self.model.load_state_dict(torch.load(model_paras_path))
-
-        if opt is None:
-            self.opt = torch.optim.SGD(model.parameters(), 5e-4, 0.9)
-
-        if criteria is None:
-            self.criteria = torch.nn.CrossEntropyLoss()
+            state_logger(f"Model {model_paras_path} loaded")
 
     def train(self):
         state_logger("Model and Dataset Loaded, Start to Train!")
         if self.logger is None and self.is_tensorboard is True:
-            self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__.lower(), time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+            self.logger = Logger("logger/{}-{}".format(self.model_name, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
         self.time_start = time.time()
 
         if self.is_gpu:
-            self.model = self.model.cuda()
+            self.model = self.model.to(self.device)
 
         self.model.train()
 
         self.iteration = 0
 
         for epoch in range(self.epochs):
-            for data, targets in self.dataloader:
-                self.train_mini_batch(data, targets)
+            for d in self.dataloader:
+                self.train_mini_batch(d)
 
             if (epoch + 1) % self.log_every_epoch == 0 or epoch == 0:
                 self.model.eval()
@@ -87,8 +88,8 @@ class TrainVessel:
                         data, target = self.dataloader.dataset.__getitem__(index)
 
                         if self.is_gpu:
-                            data = data.cuda()
-                            target = target.cuda()
+                            data = data.to(self.device)
+                            target = target.to(self.device)
 
                         data = torch.unsqueeze(data, 0)
                         target = torch.unsqueeze(target, 0)
@@ -111,9 +112,9 @@ class TrainVessel:
                             torch.save(self.model.state_dict(), self.model_save_path)
                     else:
                         if self.is_multi_gpu:
-                            torch.save(self.model.module.state_dict(), self.model.__class__.__name__.lower() + ".pth")
+                            torch.save(self.model.module.state_dict(), self.model_name + ".pth")
                         else:
-                            torch.save(self.model.state_dict(), self.model.__class__.__name__.lower() + ".pth")
+                            torch.save(self.model.state_dict(), self.model_name + ".pth")
 
                 self.model.train()
 
@@ -122,18 +123,20 @@ class TrainVessel:
         if self.is_tensorboard:
             input_data, _ = next(iter(self.dataloader))
             if self.is_gpu:
-                input_data = input_data.cuda()
+                input_data = input_data.to(self.device)
             self.logger.add_graph(self.model, input_data)
             self.logger.close()
 
         state_logger("Training Completed!")
 
-    def train_mini_batch(self, data, targets):
+    def train_mini_batch(self, d):
+        data, targets = d
+
         self.opt.zero_grad()
 
         if self.is_gpu:
-            data = data.cuda()
-            targets = targets.cuda()
+            data = data.to(self.device)
+            targets = targets.to(self.device)
 
         output = self.model(data)
         if isinstance(output, tuple):
@@ -176,15 +179,16 @@ class TrainVessel:
         self.eval_metric_name = metric_name
         self.eval_metric_func = metric_func
 
-    def gpu(self):
+    def gpu(self, gpu_id=0):
         self.is_gpu = True
+        self.device = torch.device(f"cuda:{gpu_id}")
 
     def cpu(self):
+        self.device = torch.device("cpu")
         self.is_gpu = False
 
     def load_model_para(self, model_paras_path: str):
         self.model.load_state_dict(torch.load(model_paras_path))
-
 
     def enable_tensorboard(self, path=None):
         self.is_tensorboard = True
@@ -194,23 +198,48 @@ class TrainVessel:
     def save_model_to(self, path):
         self.model_save_path = path
 
-    def multi_gpu(self, device_ids):
+    def multi_gpu(self, device_ids, initial_store_id=None):
         self.is_multi_gpu = True
         self.is_gpu = True
+        self.device = torch.device(f"cuda:{device_ids[0] if initial_store_id is None else initial_store_id}")
         self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
-
 
     def tensorboard_log_model(self):
         if self.logger is None:
             self.logger = Logger("logger/{}-{}".format(self.model.__class__.__name__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
         if self.is_gpu:
-            self.model = self.model.cuda()
+            self.model = self.model.to(self.device)
 
         input_data, _ = next(iter(self.dataloader))
 
         if self.is_gpu:
-            input_data = input_data.cuda()
+            input_data = input_data.to(self.device)
 
         self.logger.add_graph(self.model, input_data)
         self.logger.close()
+
+
+if __name__ == '__main__':
+    from dxtorchutils.ImageClassification.models import ResNet50, ResNet18
+    from dxtorchutils.ImageClassification.dataset import Dataset, DatasetConfig
+
+    # data
+    dataset_config = DatasetConfig("../../../SampleContri/resources/data/catvsdog/train")
+    dataset_config.resize_raw((224, 224))
+    dataset_config.set_label_condition_by_raw_name(
+        [0, lambda raw_name: raw_name.startswith("cat")],
+        [1, lambda raw_name: raw_name.startswith("dog")]
+    )
+    dataset = Dataset(dataset_config)
+    dataloader = DataLoader(dataset, 128, shuffle=True)
+
+    model = ResNet18()
+
+    tv = TrainVessel(dataloader, model)
+    tv.eval_num = 1000
+    tv.gpu(7)
+    tv.save_model_to("../../../SampleContri/resources/model/resnet18_base.pth")
+    tv.epochs = 40
+    tv.enable_tensorboard("../../../SampleContri/resources/tensorboard/resnet18_base")
+    tv.train()

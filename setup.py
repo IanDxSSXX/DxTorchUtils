@@ -7,7 +7,8 @@ def _process_requirements():
     tensorboard>=2.3.0
     function==1.2.0
     numpy>=1.19.4
-    opencv-python>=4.4.0.44""".split('\n')
+    opencv-python>=4.4.0.44
+    matplotlib""".split('\n')
 
     requires = []
     for pkg in packages:
@@ -21,7 +22,7 @@ def _process_requirements():
 
 setuptools.setup(
     name="dxtorchutils",
-    version="0.2.8",
+    version="0.2.9",
     author="IanDx",
     author_email="IanDxSSXX@gmail.com",
     description="Some utils and models in pytorch",

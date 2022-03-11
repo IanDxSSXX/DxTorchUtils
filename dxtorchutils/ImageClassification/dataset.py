@@ -36,7 +36,6 @@ class DatasetConfig:
         else:
             self.raw_dir_path = raw_dir_path
 
-
     def all_set_up(self):
         # 拿到所有的 raw name
         raw_names = os.listdir(self.raw_dir_path)
@@ -74,7 +73,6 @@ class DatasetConfig:
         """
         self.raw_funcs.append(lambda img: cv2.resize(img, dsize, dst, fx, fy, interpolation))
 
-
     def cvt_color_raw(self, code=cv2.COLOR_RGB2GRAY):
         """
         原图改变颜色顺序，默认BGR转灰度图
@@ -82,7 +80,6 @@ class DatasetConfig:
         :return:
         """
         self.raw_funcs.append(lambda img: cv2.cvtColor(img, code))
-
 
     def add_raw_func(self, *raw_funcs):
         """
@@ -94,7 +91,6 @@ class DatasetConfig:
         """
         for raw_func in raw_funcs:
             self.raw_funcs.append(raw_func)
-
 
     def set_label_condition_by_raw_name(self, *label_condition):
         """
@@ -109,7 +105,6 @@ class DatasetConfig:
         """
         for lc in label_condition:
             self.lc.append(lc)
-
 
     def stop_at_idx(self, stop_at):
         """
@@ -129,10 +124,8 @@ class SingleDataset(data.Dataset):
         self.targets = dataset_config.targets
         self.raw_funcs = dataset_config.raw_funcs
 
-
     def __len__(self):
         return len(self.data)
-
 
     def __getitem__(self, index):
         raw_path = self.data[index]
@@ -150,7 +143,6 @@ class SingleDataset(data.Dataset):
         targets = torch.from_numpy(np.array(label)).type(torch.LongTensor)
 
         return data, targets
-
 
     def get_data_target(self, raw_path, data=None):
         raw_image = cv2.imread(raw_path)
@@ -174,7 +166,6 @@ class SingleDataset(data.Dataset):
             data.append(raw_image)
 
             return data
-
 
 
 class Dataset(data.Dataset):

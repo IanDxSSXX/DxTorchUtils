@@ -3,15 +3,16 @@ import numpy as np
 
 def confusion_matrix(targets, predictions, return_categories=False):
     """
-    给定标签和预测，返回混淆矩阵
-    :param targets:
-    :param predictions:
-    :param return_categories: 若是true，返回 (matrix, categories)
-    :return:
-    """
-    # 所有种类
-    categories = np.unique(np.append(targets, predictions, 0))
-    length = len(categories)
+       给定标签和预测，返回混淆矩阵
+       :param targets:
+       :param predictions:
+       :param return_categories: 若是true，返回 (matrix, categories)
+       :return:
+       """
+    assert np.issubdtype(targets.dtype, int), f"only support"
+    targets, predictions = np.array(targets), np.array(predictions)
+    length = max(targets + predictions) + 1
+    categories = range(length)
 
     # 拿到全为零的混淆矩阵
     matrix = np.zeros((length, length)).astype(np.int64)
@@ -20,47 +21,18 @@ def confusion_matrix(targets, predictions, return_categories=False):
     targets = np.array(targets).flatten()
     predictions = np.array(predictions).flatten()
 
-    # 获得标签值的排序顺序
-    sorted_indices = np.argsort(targets)
-
-    # 排序标签和预测值
-    sorted_targets = targets[sorted_indices]
-    sorted_predictions = predictions[sorted_indices]
-
-    # 拿到已经按标签值排序好的预测值的相对排序顺序
-    sorted_indices = np.argsort(sorted_predictions + sorted_targets * (sorted_targets[-1] + 1))
-
-    # 重排标签和预测值
-    sorted_targets = sorted_targets[sorted_indices]
-    sorted_predictions = sorted_predictions[sorted_indices]
-
-    # e.g.
-    #   [2, 0, 1, 1] label
-    #   [1, 0, 2, 0] prediction
-    # ->[0, 1, 1, 2] label
-    # ->[0, 0, 2, 1] prediction
-
-    ci = 0
-    cj = 0
-
-    # 时间复杂度为o(n)
-    # 遍历所有的标签，由于类也是从小到大，排序好的标签也是从小到大，所以如果标签和类不匹配，
-    # 让标签向后移动一位，以此类推，直到匹配，此方法不需要回看，预测值同理，对应位置的混淆矩阵值加一
-    for i in range(len(targets)):
-        while (ci < len(categories)) and (sorted_targets[i] != categories[ci]):
-            ci += 1
-            cj = 0
-
-        while (cj < len(categories)) and (sorted_predictions[i] != categories[cj]):
-            cj += 1
-
-        matrix[ci][cj] += 1
+    for t, p in zip(targets, predictions):
+        matrix[t][p] += 1
 
     if return_categories:
         return matrix, categories
     else:
         return matrix
 
+
+if __name__ == '__main__':
+    a,b = [0,1,2,0,0,0], [1,2,2,0,1,0]
+    print(confusion_matrix(a,b))
 
 def get_tfpn_arr(targets, predictions):
     """

@@ -3,3 +3,4 @@ tensorboard>=2.3.0
 function==1.2.0
 numpy>=1.19.4
 opencv-python>=4.4.0.44
+matplotlib
