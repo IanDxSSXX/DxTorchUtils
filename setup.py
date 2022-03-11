@@ -21,8 +21,8 @@ def _process_requirements():
 
 
 setuptools.setup(
-    name="dxtorchutils",
-    version="0.2.9",
+    name="torchtoy-pre",
+    version="0.0.1",
     author="IanDx",
     author_email="IanDxSSXX@gmail.com",
     description="Some utils and models in pytorch",

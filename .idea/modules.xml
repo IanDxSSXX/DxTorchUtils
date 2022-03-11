@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/DxTorchUtils.iml" filepath="$PROJECT_DIR$/.idea/DxTorchUtils.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/TorchToy.iml" filepath="$PROJECT_DIR$/.idea/TorchToy.iml" />
     </modules>
   </component>
 </project>

@@ -1,11 +1,11 @@
 # Usage
 
-`pip3 install dxtorchutils==0.0.4`
+`pip3 install torchtoy-pre`
 
 1. train
 
    ```python
-   from dxtorchutils.utils.train import TrainVessel
+   from torchtoy.utils.train import TrainVessel
    
    model = ...
    dataloader = ...
@@ -13,6 +13,8 @@
    
    # use gpu/cpu
    tv.gpu()
+   tv.gpu(1)
+   tv.multi_gpu([1,3,4])
    tv.cpu()
    # be visualized in tensorboard
    tv.set_tensorboard_dir("your/dir")
@@ -34,7 +36,7 @@
 2. validate
 
    ```python
-   from dxtorchutils.ImageClassicication.train import ValidateVessel
+   from torchtoy.ic.validate import ValidateVessel
    
    model = ...
    dataloader = ...
@@ -54,8 +56,20 @@
    vv.validate()
    ```
 
+3. dataset
+```python
+    dataset_config = DatasetConfig("/your/path")
+    dataset_config.resize_raw((224, 224))
+    dataset_config.set_label_condition_by_raw_name(
+        [0, lambda raw_name: raw_name.startswith("cat")],
+        [1, lambda raw_name: raw_name.startswith("dog")]
+    )
+    
+    dataset = Dataset(dataset_config)
+    dataloader = DataLoader(dataset, 128, shuffle=True)
 
-3. avaliable models
+```
+4. avaliable models
 
    * Iamge Classification
 
